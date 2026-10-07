@@ -141,25 +141,31 @@ static void ZHHookClass(Class cls) {
 }
 
 %ctor {
-    PCZHInitTables();
-    g_origs = [NSMutableDictionary new];
-    int num = objc_getClassList(NULL, 0);
-    if (num <= 0) return;
-    Class *classes = (__unsafe_unretained Class *)malloc(sizeof(Class) * num);
-    objc_getClassList(classes, num);
-    Class pcAction = objc_getClass("PCAction");
-    int hooked = 0;
-    if (pcAction) {
-        for (int i = 0; i < num; i++) {
-            Class c = classes[i];
-            BOOL isSub = NO;
-            Class p = class_getSuperclass(c);
-            while (p) {
-                if (p == pcAction) { isSub = YES; break; }
-                p = class_getSuperclass(p);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_global_queue(0, 0), ^{
+        @try {
+            g_origs = [NSMutableDictionary new];
+            NSMutableString *report = [NSMutableString string];
+            int num = objc_getClassList(NULL, 0);
+            if (num <= 0) return;
+            Class *classes = (__unsafe_unretained Class *)malloc(sizeof(Class) * num);
+            objc_getClassList(classes, num);
+            Class pcAction = objc_getClass("PCAction");
+            int hooked = 0;
+            if (pcAction) {
+                for (int i = 0; i < num; i++) {
+                    Class c = classes[i];
+                    BOOL isSub = NO;
+                    Class p = class_getSuperclass(c);
+                    while (p) {
+                        if (p == pcAction) { isSub = YES; break; }
+                        p = class_getSuperclass(p);
+                    }
+                    if (isSub) { ZHHookClass(c); hooked++; [report appendFormat:@"%@\n", NSStringFromClass(c)]; }
+                }
             }
-            if (isSub) { ZHHookClass(c); hooked++; }
-        }
-    }
-    free(classes);
+            free(classes);
+            [report insertString:[NSString stringWithFormat:@"hooked=%d PCAction=%@\n", hooked, pcAction ? @"存在" : @"不存在"] atIndex:0];
+            [report writeToFile:@"/var/mobile/Documents/pczh34_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        } @catch (id e) {}
+    });
 }
