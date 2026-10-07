@@ -1,20 +1,32 @@
-// 0.3.1-probe: 修正归属 + 深扫子类 + 自适应找 Bucket 单例
+// 0.3.2-probe: 多路径写标记 + 错误捕获，分辨"未注入"vs"沙盒拦截"
 #import "pczh_api.h"
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 
-static void mark(NSString *name, NSString *content) {
-    @try {
-        NSString *proc = [[NSProcessInfo processInfo] processName];
-        proc = [proc stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
-        NSString *path = [@"/var/mobile/Documents/" stringByAppendingFormat:@"pczh31_%@_%@.txt", proc, name];
-        [content writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    } @catch (id e) {}
+static NSMutableString *g_report;
+
+static void tryWrite(NSString *path, NSString *content, NSMutableString *log) {
+    NSError *err = nil;
+    BOOL ok = [content writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&err];
+    [log appendFormat:@"%@ → %@%@%@%@\n", path,
+        ok ? @"成功" : @"失败",
+        err ? @" err: " : @"", err ? err.localizedDescription : @"",
+        err ? [NSString stringWithFormat:@" [%@]", err.domain] : @""];
 }
 
 %ctor {
-    // 1. 全类扫描: 所有名字含 Action 的类及其父类链
+    g_report = [NSMutableString string];
+    NSString *proc = [[NSProcessInfo processInfo] processName];
+    [g_report appendFormat:@"进程=%@ pid=%d time=%@\n", proc, getpid(), [NSDate date]];
+
+    // 沙盒内 tmp（快捷指令进程一定能写）
+    tryWrite([NSTemporaryDirectory() stringByAppendingPathComponent:@"pczh32_report.txt"], g_report, g_report);
+    // 常规路径
+    tryWrite(@"/var/mobile/Documents/pczh32_report.txt", g_report, g_report);
+    tryWrite(@"/var/mobile/Library/Preferences/com.moss.pczh.report", g_report, g_report);
+
+    // 全类扫描（只在成功落盘的路径尽力而为）
     @try {
         NSMutableString *cls = [NSMutableString string];
         int num = objc_getClassList(NULL, 0);
@@ -23,38 +35,25 @@ static void mark(NSString *name, NSString *content) {
         for (int i = 0; i < num; i++) {
             NSString *nm = NSStringFromClass(classes[i]);
             if ([nm hasPrefix:@"PC"] || [nm containsString:@"Action"]) {
-                Class superCls = class_getSuperclass(classes[i]);
-                [cls appendFormat:@"%@  ←  %@\n", nm, superCls ? NSStringFromClass(superCls) : @"(nil)"];
+                Class sp = class_getSuperclass(classes[i]);
+                [cls appendFormat:@"%@ ← %@\n", nm, sp ? NSStringFromClass(sp) : @"(nil)"];
             }
         }
         free(classes);
-        mark(@"classes", cls);
+        [g_report appendFormat:@"\n==== 类扫描 ====\n%@\n", cls];
+        [g_report writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"pczh32_report.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [g_report writeToFile:@"/var/mobile/Documents/pczh32_report.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
     } @catch (id e) {}
-    // 2. Bucket 单例自适应 + 注册表
+
     @try {
         Class bucket = objc_getClass("PCSharedBucketManager");
-        NSMutableString *out = [NSMutableString string];
-        for (NSString *gn in @[@"sharedBucketManager", @"defaultManager", @"sharedInstance", @"sharedManager"]) {
-            SEL s = NSSelectorFromString(gn);
-            if (bucket && [(id)bucket respondsToSelector:s]) {
-                id inst = ((id(*)(id, SEL))objc_msgSend)((id)bucket, s);
-                [out appendFormat:@"单例方法: %@ → %@\n", gn, inst];
-                for (NSString *mn in @[@"registeredCustomActions", @"registeredCustomActionsCachedData", @"dataPrefs"]) {
-                    SEL ms = NSSelectorFromString(mn);
-                    if (inst && [inst respondsToSelector:ms]) {
-                        id v = ((id(*)(id, SEL))objc_msgSend)(inst, ms);
-                        [out appendFormat:@"\n[%@]:\n%@\n", mn, v];
-                    } else {
-                        [out appendFormat:@"[%@] 无此方法\n", mn];
-                    }
-                }
-                break;
-            } else {
-                [out appendFormat:@"%@ 不可用\n", gn];
-            }
+        id inst = bucket ? ((id(*)(id, SEL))objc_msgSend)((id)bucket, sel_registerName("sharedInstance")) : nil;
+        SEL ms = sel_registerName("registeredCustomActionsCachedData");
+        if (inst && [inst respondsToSelector:ms]) {
+            id v = ((id(*)(id, SEL))objc_msgSend)(inst, ms);
+            [g_report appendFormat:@"\n==== 注册表 ====\n%@\n", v];
+            [g_report writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:@"pczh32_report.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [g_report writeToFile:@"/var/mobile/Documents/pczh32_report.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
-        mark(@"bucket", out);
-    } @catch (NSException *e) {
-        mark(@"bucket_FAILED", [NSString stringWithFormat:@"%@: %@", e.name, e.reason]);
-    }
+    } @catch (id e) {}
 }
