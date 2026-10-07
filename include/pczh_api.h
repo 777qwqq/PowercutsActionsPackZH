@@ -14,3 +14,8 @@
 - (void)registerActionWithIdentifier:(NSString *)identifier action:(id)action;
 - (void)registerActionWithIdentifier:(NSString *)identifier action:(id)action writeToCache:(BOOL)writeToCache;
 @end
+
+@interface PCSharedBucketManager : NSObject
++ (instancetype)defaultManager;
+- (id)dataPrefs;
+@end
