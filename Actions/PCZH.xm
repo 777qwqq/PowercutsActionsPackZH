@@ -190,11 +190,11 @@ static id sbSharedInstance(NSString *className) {
         PowercutsManager *m = [PowercutsManager sharedInstance];
                [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.respring" action:[ZHRespringAction new]];
                [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.reboot" action:[ZHRebootAction new]];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.goHome" action:[ZHGoHomeAction new] writeToCache:YES];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.showAppSwitcher" action:[ZHShowAppSwitcherAction new] writeToCache:YES];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.openApp" action:[ZHOpenAppAction new] writeToCache:YES];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.killApp" action:[ZHKillAppAction new] writeToCache:YES];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.uiCache" action:[ZHUICacheAction new] writeToCache:YES];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.wakeScreen" action:[ZHWakeScreenAction new] writeToCache:YES];
+        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.goHome" action:[ZHGoHomeAction new]];
+        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.showAppSwitcher" action:[ZHShowAppSwitcherAction new]];
+        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.openApp" action:[ZHOpenAppAction new]];
+        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.killApp" action:[ZHKillAppAction new]];
+        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.uiCache" action:[ZHUICacheAction new]];
+        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.wakeScreen" action:[ZHWakeScreenAction new]];
     }
 }
