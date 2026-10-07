@@ -156,6 +156,13 @@ static NSDictionary *PCZHL10N(NSDictionary *orig) {
     return out;
 }
 
+
+static IMP origStore = NULL;
+static void ZH_store_imp(id self, SEL _cmd, NSDictionary *actionsData, BOOL writeToCache) {
+    NSDictionary *translated = PCZHL10N(actionsData);
+    if (origStore) ((void(*)(id,SEL,id,BOOL))origStore)(self, _cmd, translated, writeToCache);
+}
+
 static NSDictionary *ZH_cachedData_imp(id self, SEL _cmd) {
     NSDictionary *orig = ((NSDictionary*(*)(id,SEL))objc_msgSend)(self, _cmd);
     return PCZHL10N(orig);
@@ -213,6 +220,12 @@ static void ZHHookClass(Class cls) {
             if (bm) {
                 Method m = class_getInstanceMethod(bm, sel_registerName("registeredCustomActionsCachedData"));
                 if (m) method_setImplementation(m, (IMP)ZH_cachedData_imp);
+            }
+            // 写入路径 hook: 注册写缓存前先翻译
+            Method m2 = class_getInstanceMethod(bm, sel_registerName("storeNewRegisteredCustomActionsCachedData:"));
+            if (m2) {
+                origStore = method_getImplementation(m2);
+                method_setImplementation(m2, (IMP)ZH_store_imp);
             }
 
             // 缓存文件中文化（读原文件→翻译→写回）
