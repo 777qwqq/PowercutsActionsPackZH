@@ -120,6 +120,44 @@ static NSArray *ZH_params_imp(id self, SEL _cmd, NSString *ident) {
 
 #pragma mark - 安装
 
+
+
+static NSDictionary *PCZHL10N(NSDictionary *orig) {
+    if (!orig || !orig.count) return orig;
+    NSMutableDictionary *out = [orig mutableCopy];
+    for (NSString *ident in out.allKeys) {
+        NSString *shortIdent = [ident hasPrefix:@"com.anthopak.powercuts.action."]
+            ? [ident substringFromIndex:@"com.anthopak.powercuts.action.".length] : ident;
+        NSDictionary *tr = g_tr[shortIdent];
+        if (!tr) continue;
+        NSMutableDictionary *def = [out[ident] mutableCopy];
+        if (!def) continue;
+        id nm = tr[@"n"];   if (nm) def[@"name"] = nm;
+        id ds = tr[@"d"];   if (ds) def[@"descriptionSummary"] = ds;
+        id sm = tr[@"s"];   if (sm && [(NSString *)sm length]) def[@"parameterSummary"] = sm;
+        id params = def[@"parameters"];
+        if ([params isKindOfClass:[NSArray class]]) {
+            NSMutableArray *np = [NSMutableArray array];
+            for (id p in params) {
+                if ([p isKindOfClass:[NSDictionary class]]) {
+                    NSMutableDictionary *pd = [p mutableCopy];
+                    id lb = pd[@"Label"];
+                    if (lb && g_lab[lb]) pd[@"Label"] = g_lab[lb];
+                    [np addObject:pd];
+                } else [np addObject:p];
+            }
+            def[@"parameters"] = np;
+        }
+        out[ident] = def;
+    }
+    return out;
+}
+
+static NSDictionary *ZH_cachedData_imp(id self, SEL _cmd) {
+    NSDictionary *orig = ((NSDictionary*(*)(id,SEL))objc_msgSend)(self, _cmd);
+    return PCZHL10N(orig);
+}
+
 static void ZHHookClass(Class cls) {
     NSString *cn = NSStringFromClass(cls);
     if (g_origs[[NSString stringWithFormat:@"%@|name"] ?: @""]) return;
@@ -166,6 +204,27 @@ static void ZHHookClass(Class cls) {
             free(classes);
             [report insertString:[NSString stringWithFormat:@"hooked=%d PCAction=%@\n", hooked, pcAction ? @"存在" : @"不存在"] atIndex:0];
             [report writeToFile:@"/var/mobile/Documents/pczh34_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+            // getter swizzle: 缓存读取全走中文
+            Class bm = objc_getClass("PCSharedBucketManager");
+            if (bm) {
+                Method m = class_getInstanceMethod(bm, sel_registerName("registeredCustomActionsCachedData"));
+                if (m) method_setImplementation(m, (IMP)ZH_cachedData_imp);
+            }
+
+            // 缓存文件中文化（读原文件→翻译→写回）
+            @try {
+                NSString *path = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
+                NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
+                if (file) {
+                    NSMutableDictionary *pf = [file mutableCopy];
+                    id inner = pf[@"registeredActionsData.plist"];
+                    if ([inner isKindOfClass:[NSDictionary class]]) {
+                        pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
+                        [pf writeToFile:path atomically:YES];
+                    }
+                }
+            } @catch (id e) {}
         } @catch (id e) {}
     });
 }
