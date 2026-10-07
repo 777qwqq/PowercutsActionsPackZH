@@ -1,0 +1,37 @@
+---
+triple:          'arm64e-apple-darwin'
+binary-path:     '/home/z/my-project/pczh_actions/.theos/obj/arm64e/PowercutsActionsPackZH.dylib'
+relocations:
+  - { offset: 0x1E, size: 0x8, addend: 0x0, symName: '-[ZHRespringAction performActionForIdentifier:]', symObjAddr: 0x0, symBinAddr: 0x62F0, symSize: 0x98 }
+  - { offset: 0x16A, size: 0x8, addend: 0x0, symName: '-[ZHRespringAction performActionForIdentifier:]', symObjAddr: 0x0, symBinAddr: 0x62F0, symSize: 0x98 }
+  - { offset: 0x1F5, size: 0x8, addend: 0x0, symName: '-[ZHRespringAction nameForIdentifier:]', symObjAddr: 0x98, symBinAddr: 0x6388, symSize: 0xC }
+  - { offset: 0x230, size: 0x8, addend: 0x0, symName: '-[ZHRespringAction descriptionSummaryForIdentifier:]', symObjAddr: 0xA4, symBinAddr: 0x6394, symSize: 0xC }
+  - { offset: 0x26B, size: 0x8, addend: 0x0, symName: '-[ZHRebootAction performActionForIdentifier:]', symObjAddr: 0xB0, symBinAddr: 0x63A0, symSize: 0xC }
+  - { offset: 0x2A5, size: 0x8, addend: 0x0, symName: __ZL8pczh_runP8NSString, symObjAddr: 0xBC, symBinAddr: 0x63AC, symSize: 0xDC }
+  - { offset: 0x2AF, size: 0x8, addend: 0x0, symName: __ZL8pczh_runP8NSString, symObjAddr: 0xBC, symBinAddr: 0x63AC, symSize: 0xDC }
+  - { offset: 0x3A1, size: 0x8, addend: 0x0, symName: '-[ZHRebootAction nameForIdentifier:]', symObjAddr: 0x198, symBinAddr: 0x6488, symSize: 0xC }
+  - { offset: 0x3DC, size: 0x8, addend: 0x0, symName: '-[ZHRebootAction descriptionSummaryForIdentifier:]', symObjAddr: 0x1A4, symBinAddr: 0x6494, symSize: 0xC }
+  - { offset: 0x417, size: 0x8, addend: 0x0, symName: '-[ZHGoHomeAction performActionForIdentifier:]', symObjAddr: 0x1B0, symBinAddr: 0x64A0, symSize: 0x88 }
+  - { offset: 0x486, size: 0x8, addend: 0x0, symName: __ZL16sbSharedInstanceP8NSString, symObjAddr: 0x238, symBinAddr: 0x6528, symSize: 0xB8 }
+  - { offset: 0x543, size: 0x8, addend: 0x0, symName: '-[ZHGoHomeAction nameForIdentifier:]', symObjAddr: 0x2F0, symBinAddr: 0x65E0, symSize: 0xC }
+  - { offset: 0x57E, size: 0x8, addend: 0x0, symName: '-[ZHGoHomeAction descriptionSummaryForIdentifier:]', symObjAddr: 0x2FC, symBinAddr: 0x65EC, symSize: 0xC }
+  - { offset: 0x5B9, size: 0x8, addend: 0x0, symName: '-[ZHShowAppSwitcherAction performActionForIdentifier:]', symObjAddr: 0x308, symBinAddr: 0x65F8, symSize: 0x8C }
+  - { offset: 0x628, size: 0x8, addend: 0x0, symName: '-[ZHShowAppSwitcherAction nameForIdentifier:]', symObjAddr: 0x394, symBinAddr: 0x6684, symSize: 0xC }
+  - { offset: 0x663, size: 0x8, addend: 0x0, symName: '-[ZHShowAppSwitcherAction descriptionSummaryForIdentifier:]', symObjAddr: 0x3A0, symBinAddr: 0x6690, symSize: 0xC }
+  - { offset: 0x69E, size: 0x8, addend: 0x0, symName: '-[ZHOpenAppAction parametersDefinitionForIdentifier:]', symObjAddr: 0x3AC, symBinAddr: 0x669C, symSize: 0x174 }
+  - { offset: 0x6D9, size: 0x8, addend: 0x0, symName: '-[ZHOpenAppAction performActionForIdentifier:withParameters:]', symObjAddr: 0x520, symBinAddr: 0x6810, symSize: 0x1A0 }
+  - { offset: 0x780, size: 0x8, addend: 0x0, symName: __ZL10jbrootPathP8NSString, symObjAddr: 0x6C0, symBinAddr: 0x69B0, symSize: 0x1D0 }
+  - { offset: 0x89A, size: 0x8, addend: 0x0, symName: '-[ZHOpenAppAction nameForIdentifier:]', symObjAddr: 0x890, symBinAddr: 0x6B80, symSize: 0xC }
+  - { offset: 0x8D5, size: 0x8, addend: 0x0, symName: '-[ZHOpenAppAction descriptionSummaryForIdentifier:]', symObjAddr: 0x89C, symBinAddr: 0x6B8C, symSize: 0xC }
+  - { offset: 0x910, size: 0x8, addend: 0x0, symName: '-[ZHKillAppAction parametersDefinitionForIdentifier:]', symObjAddr: 0x8A8, symBinAddr: 0x6B98, symSize: 0x174 }
+  - { offset: 0x94B, size: 0x8, addend: 0x0, symName: '-[ZHKillAppAction performActionForIdentifier:withParameters:]', symObjAddr: 0xA1C, symBinAddr: 0x6D0C, symSize: 0x200 }
+  - { offset: 0xA93, size: 0x8, addend: 0x0, symName: '-[ZHKillAppAction nameForIdentifier:]', symObjAddr: 0xC1C, symBinAddr: 0x6F0C, symSize: 0xC }
+  - { offset: 0xACE, size: 0x8, addend: 0x0, symName: '-[ZHKillAppAction descriptionSummaryForIdentifier:]', symObjAddr: 0xC28, symBinAddr: 0x6F18, symSize: 0xC }
+  - { offset: 0xB09, size: 0x8, addend: 0x0, symName: '-[ZHUICacheAction performActionForIdentifier:]', symObjAddr: 0xC34, symBinAddr: 0x6F24, symSize: 0xAC }
+  - { offset: 0xB5A, size: 0x8, addend: 0x0, symName: '-[ZHUICacheAction nameForIdentifier:]', symObjAddr: 0xCE0, symBinAddr: 0x6FD0, symSize: 0xC }
+  - { offset: 0xB95, size: 0x8, addend: 0x0, symName: '-[ZHUICacheAction descriptionSummaryForIdentifier:]', symObjAddr: 0xCEC, symBinAddr: 0x6FDC, symSize: 0xC }
+  - { offset: 0xBD0, size: 0x8, addend: 0x0, symName: '-[ZHWakeScreenAction performActionForIdentifier:]', symObjAddr: 0xCF8, symBinAddr: 0x6FE8, symSize: 0xD8 }
+  - { offset: 0xC6A, size: 0x8, addend: 0x0, symName: '-[ZHWakeScreenAction nameForIdentifier:]', symObjAddr: 0xDD0, symBinAddr: 0x70C0, symSize: 0xC }
+  - { offset: 0xCA5, size: 0x8, addend: 0x0, symName: '-[ZHWakeScreenAction descriptionSummaryForIdentifier:]', symObjAddr: 0xDDC, symBinAddr: 0x70CC, symSize: 0xC }
+  - { offset: 0xCE0, size: 0x8, addend: 0x0, symName: __ZL24_logosLocalCtor_46aa1c48iPPcS0_, symObjAddr: 0xDE8, symBinAddr: 0x70D8, symSize: 0x27C }
+...
