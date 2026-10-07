@@ -9,7 +9,7 @@ static id sbShared(NSString *cls) {
     Class c = objc_getClass(cls.UTF8String);
     if (!c) return nil;
     SEL s = sel_registerName("sharedInstance");
-    if (!((id)c respondsToSelector:s)) return nil;
+    if (![(id)c respondsToSelector:s]) return nil;
     return ((id(*)(id, SEL))objc_msgSend)((id)c, s);
 }
 
