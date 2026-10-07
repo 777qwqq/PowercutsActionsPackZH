@@ -1,6 +1,7 @@
 // 0.1.5-probe3: dump registeredCustomActions 全量结构 + 自适应找 PCSharedBucketManager 单例
 #import "pczh_api.h"
 #import <Foundation/Foundation.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 #import <dlfcn.h>
 
