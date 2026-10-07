@@ -6,6 +6,8 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = PCZHExecutor
 PCZHExecutor_FILES = $(wildcard Actions/*.xm)
+PCZHExecutor_LIBRARIES = powercuts
 PCZHExecutor_CFLAGS = -fobjc-arc -w -fno-modules
+PCZHExecutor_LDFLAGS = -L$(PWD)/lib
 
 include $(THEOS_MAKE_PATH)/tweak.mk
