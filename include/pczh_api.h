@@ -19,3 +19,7 @@
 + (instancetype)defaultManager;
 - (id)dataPrefs;
 @end
+
+@interface PowercutsManager (PCZHProbe)
+- (NSDictionary *)registeredCustomActions;
+@end
