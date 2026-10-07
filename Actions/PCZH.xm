@@ -17,25 +17,25 @@ static void runCommand(int code) {
     @try {
         if (code == 1) {
             // 回主屏幕
-            id c = sbShared("SBUIController");
+            id c = sbShared(@"SBUIController");
             SEL s = NSSelectorFromString(@"simulateHomeButtonClick");
             if (c && [c respondsToSelector:s]) ((void(*)(id,SEL))objc_msgSend)(c, s);
         } else if (code == 2) {
             // 显示多任务
-            id c = sbShared("SBUIController");
+            id c = sbShared(@"SBUIController");
             SEL s = NSSelectorFromString(@"showAppSwitcher:");
             if (c && [c respondsToSelector:s]) ((void(*)(id,SEL,BOOL))objc_msgSend)(c, s, YES);
         } else if (code == 3) {
             // 结束应用: bundleId 从命令文件读
             NSString *bid = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/pczh_cmd.txt" encoding:NSUTF8StringEncoding error:nil];
             if (!bid.length) return;
-            id pm = sbShared("FBProcessManager");
+            id pm = sbShared(@"FBProcessManager");
             SEL s = NSSelectorFromString(@"terminateApplicationWithBundleID:");
             if (pm && [pm respondsToSelector:s]) {
                 ((void(*)(id,SEL,id))objc_msgSend)(pm, s, bid);
                 return;
             }
-            id ac = sbShared("SBApplicationController");
+            id ac = sbShared(@"SBApplicationController");
             SEL gs = NSSelectorFromString(@"applicationWithDisplayIdentifier:");
             if (ac && [ac respondsToSelector:gs]) {
                 id app = ((id(*)(id,SEL,id))objc_msgSend)(ac, gs, bid);
