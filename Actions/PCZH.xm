@@ -1,4 +1,5 @@
-// 0.3.0-probe: 官方 ActionsPack 汉化前侦察。只读不写不 hook，绝不崩
+// 0.3.0-probe: 官方 ActionsPack 汉化前侦察。只读不写不 hook
+#import "pczh_api.h"
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -14,7 +15,6 @@ static void mark(NSString *name, NSString *content) {
 
 %ctor {
     @try {
-        // 1. 官方包动作类清单（PCAction 子类）
         NSMutableString *cls = [NSMutableString string];
         int num = objc_getClassList(NULL, 0);
         if (num > 0) {
@@ -31,7 +31,6 @@ static void mark(NSString *name, NSString *content) {
         mark(@"subclasses", cls);
     } @catch (id e) {}
     @try {
-        // 2. 注册表内容
         id m = [PowercutsManager sharedInstance];
         id reg = [m registeredCustomActions];
         mark(@"registry", reg ? [NSString stringWithFormat:@"%@", reg] : @"nil");
