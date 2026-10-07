@@ -188,8 +188,8 @@ static id sbSharedInstance(NSString *className) {
 %ctor {
     @autoreleasepool {
         PowercutsManager *m = [PowercutsManager sharedInstance];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.respring" action:[ZHRespringAction new] writeToCache:YES];
-        [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.reboot" action:[ZHRebootAction new] writeToCache:YES];
+               [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.respring" action:[ZHRespringAction new]];
+               [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.reboot" action:[ZHRebootAction new]];
         [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.goHome" action:[ZHGoHomeAction new] writeToCache:YES];
         [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.showAppSwitcher" action:[ZHShowAppSwitcherAction new] writeToCache:YES];
         [m registerActionWithIdentifier:@"com.anthopak.powercuts.action.openApp" action:[ZHOpenAppAction new] writeToCache:YES];
