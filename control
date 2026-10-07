@@ -1,6 +1,6 @@
 Package: com.moss.powercutsactionspackzh
 Name: Powercuts Actions Pack 中文版
-Version: 0.1.1
+Version: 0.1.2-probe
 Architecture: iphoneos-arm64
 Description: Powercuts 动作包开源中文仿编版（Phase 1：设备控制类 8 动作）。需先安装 Powercuts 主包。替换官方 Actions Pack（identifier 与原版一致，已有快捷指令绑定不受影响）。
 Depends: com.anthopak.powercuts-rootless (>= 1.2.2), firmware (>= 15.0)
