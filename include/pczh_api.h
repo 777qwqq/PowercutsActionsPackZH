@@ -3,5 +3,6 @@
 @end
 @interface PowercutsManager : NSObject
 + (instancetype)sharedInstance;
-- (NSDictionary *)registeredCustomActions;
+@end
+@interface PCSharedBucketManager : NSObject
 @end
