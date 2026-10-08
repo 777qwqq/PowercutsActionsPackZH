@@ -259,9 +259,10 @@ static void PCZHDelayedInit(void);
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
-            // 0.4.12：文件名无 .plist 后缀（原始逆向记录），且需 jbroot 解析（roothide）
+            // 0.4.13：真结构实证（0.4.12 报告）——<jbroot>/var/mobile/Library/Preferences/
+            // com.anthopak.powercuts.registeredActionsData.plist，内层键 registeredCustomActionsData
             NSMutableString *report = [NSMutableString string];
-            NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData";
+            NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
             Dl_info di;
             if (dladdr((void *)PCZHDelayedInit, &di) && di.dli_fname) {
                 NSString *self_ = [NSString stringWithUTF8String:di.dli_fname];
@@ -271,31 +272,32 @@ static void PCZHDelayedInit(void) {
                     NSRange slash = [rest rangeOfString:@"/"];
                     if (slash.location != NSNotFound) {
                         NSString *jbroot = [self_ substringToIndex:r.location + slash.location];
-                        base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData", jbroot];
+                        base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist", jbroot];
                         [report appendFormat:@"jbroot=%@\n", jbroot];
                     }
                 }
             }
-            NSArray *paths = @[base, [base stringByAppendingString:@".plist"]];
-            int translated = 0;
-            for (NSString *path in paths) {
-                NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
-                if (!file) { [report appendFormat:@"MISS %@\n", path.lastPathComponent]; continue; }
-                id inner = file[@"registeredActionsData.plist"];
-                if (![inner isKindOfClass:[NSDictionary class]]) { [report appendFormat:@"NOKEY %@ keys=%@\n", path.lastPathComponent, file.allKeys]; continue; }
+            NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:base];
+            if (!file) { [report appendString:@"FILE MISS\n"]; }
+            else {
                 NSMutableDictionary *pf = [file mutableCopy];
-                int n = 0;
-                pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
-                for (NSString *k in pf[@"registeredActionsData.plist"]) {
-                    if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
+                id data = pf[@"registeredCustomActionsData"];
+                if (![data isKindOfClass:[NSDictionary class]]) {
+                    [report appendFormat:@"BAD keys=%@\n", file.allKeys];
+                } else {
+                    int n = 0;
+                    NSDictionary *tr = PCZHL10N(data);
+                    for (NSString *k in tr) {
+                        if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
+                    }
+                    pf[@"registeredCustomActionsData"] = tr;
+                    BOOL ok = [pf writeToFile:base atomically:YES];
+                    [report appendFormat:@"TRANSLATED actions=%d ok=%d\n", n, ok];
+                    if (ok) notify_post("com.anthopak.powercuts.dataChanged");
                 }
-                BOOL ok = [pf writeToFile:path atomically:YES];
-                [report appendFormat:@"HIT %@ ok=%d actions=%d\n", path.lastPathComponent, ok, n];
-                if (ok) translated++;
             }
-            if (translated) notify_post("com.anthopak.powercuts.dataChanged");
-            [report appendFormat:@"mode=noplusplist v0.4.12 translated=%d\n", translated];
-            [report writeToFile:@"/var/mobile/Documents/pczh42_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=realkey v0.4.13\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh43_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
