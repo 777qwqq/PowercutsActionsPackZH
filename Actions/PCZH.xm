@@ -55,8 +55,31 @@ static NSDictionary *ZHTr(NSString *ident) {
 static void PCZHInitTables(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        // 1.0.2：路径统一 /var/jb（roothide/Dopamine 通用符号链接），不再 dladdr
-        NSData *jd = [NSData dataWithContentsOfFile:@"/var/jb/usr/share/pczh/table.json"];
+        // 1.0.6：不依赖 dladdr（本地构建二进制中其结果不可靠）
+        // 顺序：已知 jbroot 绝对路径 → 扫描 .jbroot-* → /var/jb
+        NSData *jd = nil;
+        NSString *used = nil;
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSArray *cands = @[
+            @"/var/containers/Bundle/Application/.jbroot-813B67D305908D16/usr/share/pczh/table.json",
+            @"/var/jb/usr/share/pczh/table.json",
+            @"/usr/share/pczh/table.json",
+        ];
+        for (NSString *c in cands) {
+            jd = [NSData dataWithContentsOfFile:c];
+            if (jd) { used = c; break; }
+        }
+        if (!jd) {
+            // 扫描其他 .jbroot-* 目录
+            NSString *appDir = @"/var/containers/Bundle/Application";
+            for (NSString *d2 in [fm contentsOfDirectoryAtPath:appDir error:nil]) {
+                if (![d2 hasPrefix:@".jbroot-"]) continue;
+                NSString *c = [NSString stringWithFormat:@"%@/%@/usr/share/pczh/table.json", appDir, d2];
+                if ([c isEqualToString:@"/var/containers/Bundle/Application/.jbroot-813B67D305908D16/usr/share/pczh/table.json"]) continue;
+                jd = [NSData dataWithContentsOfFile:c];
+                if (jd) { used = c; break; }
+            }
+        }
         NSDictionary *root = jd ? [NSJSONSerialization JSONObjectWithData:jd options:0 error:nil] : nil;
         if (root) {
             g_tr = root[@"tr"] ?: @{};
@@ -65,6 +88,13 @@ static void PCZHInitTables(void) {
         } else {
             g_tr = @{}; g_lab = @{}; g_setMap = @{};
         }
+        @try {
+            NSURL *g = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.is.workflow.shortcuts"];
+            NSString *sp = [(g.path ?: @"/tmp") stringByAppendingPathComponent:@"pczh66_state.txt"];
+            NSMutableString *st = [NSMutableString string];
+            [st appendFormat:@"used=%@\nroot加载=%@\ntr=%lu\n", used ?: @"(none)", root ? @"OK" : @"FAIL", (unsigned long)g_tr.count];
+            [st writeToFile:sp atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        } @catch (id e) {}
     });
 }
 
