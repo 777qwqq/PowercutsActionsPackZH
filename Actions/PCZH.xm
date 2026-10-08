@@ -258,40 +258,32 @@ static void PCZHDelayedInit(void);
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
-            // 0.4.9：纯文件翻译层。全部方法 hook 已摘除——
-            // 零延迟下方法 hook 会卷入 Shortcuts cacheUpdateAndFillQueue 初始同步的递归（0.4.7/0.4.8 崩溃实证）
+            // 0.4.11：CFPreferences API 直读直写（registeredActionsData.plist 是键名不是文件名，
+            // 域 com.anthopak.powercuts；绕过 cfprefsd 磁盘缓存不可靠问题）
             NSMutableString *report = [NSMutableString string];
-            // 0.4.10：扫描候选路径（旧固定路径 + 沙盒容器 Preferences 全目录）
-            NSMutableArray *cands = [NSMutableArray array];
-            [cands addObject:@"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist"];
-            NSString *prefsDir = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Preferences"];
-            [report appendFormat:@"home=%@\n", NSHomeDirectory()];
-            NSFileManager *fm = [NSFileManager defaultManager];
-            NSArray *files = [fm contentsOfDirectoryAtPath:prefsDir error:nil];
-            for (NSString *f in files) {
-                if ([f containsString:@"anthopak"] || [f containsString:@"powercuts"]) {
-                    [cands addObject:[prefsDir stringByAppendingPathComponent:f]];
-                }
-            }
-            int translated = 0;
-            for (NSString *path in cands) {
-                NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
-                if (!file) { [report appendFormat:@"MISS %@\n", path.lastPathComponent]; continue; }
-                NSMutableDictionary *pf = [file mutableCopy];
-                id inner = pf[@"registeredActionsData.plist"];
-                if (![inner isKindOfClass:[NSDictionary class]]) { [report appendFormat:@"NOKEY %@\n", path.lastPathComponent]; continue; }
-                pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
-                BOOL ok = [pf writeToFile:path atomically:YES];
+            NSString *domain = @"com.anthopak.powercuts";
+            NSString *key = @"registeredActionsData.plist";
+            CFPreferencesAppSynchronize((__bridge CFStringRef)domain);
+            NSDictionary *val = CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)domain));
+            if ([val isKindOfClass:[NSDictionary class]]) {
                 int n = 0;
-                for (NSString *k in pf[@"registeredActionsData.plist"]) {
+                for (NSString *k in val) {
                     if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
                 }
-                [report appendFormat:@"HIT %@ ok=%d actions=%d\n", path, ok, n];
-                if (ok) translated++;
+                NSDictionary *tr = PCZHL10N(val);
+                CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFTypeRef)tr, (__bridge CFStringRef)domain);
+                Boolean ok = CFPreferencesAppSynchronize((__bridge CFStringRef)domain);
+                notify_post("com.anthopak.powercuts.dataChanged");
+                [report appendFormat:@"CFPREFS hit actions=%d total=%lu sync=%d\n", n, (unsigned long)val.count, (int)ok];
+            } else {
+                [report appendFormat:@"CFPREFS no value (class=%@)\n", NSStringFromClass([val class])];
+                // 兜底：列出域文件本体
+                NSString *p = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.plist";
+                NSDictionary *f = [NSDictionary dictionaryWithContentsOfFile:p];
+                [report appendFormat:@"domain-file keys=%@\n", f.allKeys];
             }
-            if (translated) notify_post("com.anthopak.powercuts.dataChanged");
-            [report appendString:@"mode=file-only v0.4.9\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh40_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=cfprefs v0.4.11\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh41_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
