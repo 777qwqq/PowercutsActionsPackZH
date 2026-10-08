@@ -260,30 +260,38 @@ static void PCZHDelayedInit(void) {
             PCZHInitTables();
             // 0.4.9：纯文件翻译层。全部方法 hook 已摘除——
             // 零延迟下方法 hook 会卷入 Shortcuts cacheUpdateAndFillQueue 初始同步的递归（0.4.7/0.4.8 崩溃实证）
-            NSString *path = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
-            NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
             NSMutableString *report = [NSMutableString string];
-            if (file) {
+            // 0.4.10：扫描候选路径（旧固定路径 + 沙盒容器 Preferences 全目录）
+            NSMutableArray *cands = [NSMutableArray array];
+            [cands addObject:@"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist"];
+            NSString *prefsDir = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Preferences"];
+            [report appendFormat:@"home=%@\n", NSHomeDirectory()];
+            NSFileManager *fm = [NSFileManager defaultManager];
+            NSArray *files = [fm contentsOfDirectoryAtPath:prefsDir error:nil];
+            for (NSString *f in files) {
+                if ([f containsString:@"anthopak"] || [f containsString:@"powercuts"]) {
+                    [cands addObject:[prefsDir stringByAppendingPathComponent:f]];
+                }
+            }
+            int translated = 0;
+            for (NSString *path in cands) {
+                NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
+                if (!file) { [report appendFormat:@"MISS %@\n", path.lastPathComponent]; continue; }
                 NSMutableDictionary *pf = [file mutableCopy];
                 id inner = pf[@"registeredActionsData.plist"];
-                if ([inner isKindOfClass:[NSDictionary class]]) {
-                    NSDictionary *tr = PCZHL10N(inner);
-                    pf[@"registeredActionsData.plist"] = tr;
-                    [pf writeToFile:path atomically:YES];
-                    notify_post("com.anthopak.powercuts.dataChanged");
-                    int n = 0;
-                    for (NSString *k in tr) {
-                        if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
-                    }
-                    [report appendFormat:@"file-translated actions=%d\n", n];
-                } else {
-                    [report appendString:@"file present, inner key missing\n"];
+                if (![inner isKindOfClass:[NSDictionary class]]) { [report appendFormat:@"NOKEY %@\n", path.lastPathComponent]; continue; }
+                pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
+                BOOL ok = [pf writeToFile:path atomically:YES];
+                int n = 0;
+                for (NSString *k in pf[@"registeredActionsData.plist"]) {
+                    if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
                 }
-            } else {
-                [report appendString:@"cache file not found\n"];
+                [report appendFormat:@"HIT %@ ok=%d actions=%d\n", path, ok, n];
+                if (ok) translated++;
             }
+            if (translated) notify_post("com.anthopak.powercuts.dataChanged");
             [report appendString:@"mode=file-only v0.4.9\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh39_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:@"/var/mobile/Documents/pczh40_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
