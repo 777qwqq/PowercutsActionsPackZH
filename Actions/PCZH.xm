@@ -11,6 +11,13 @@
 
 static NSDictionary *g_tr;   // identifier → {name, desc, summary}
 static NSDictionary *g_lab;  // 参数 Label/Placeholder 英文 → 中文
+static NSDictionary *ZHTr(NSString *ident) {
+    if (![ident isKindOfClass:[NSString class]]) return nil;
+    NSDictionary *t = g_tr[ident];
+    if (t) return t;
+    if ([ident hasPrefix:@"com.anthopak.powercuts.action."]) return g_tr[[ident substringFromIndex:30]];
+    return nil;
+}
 
 static void PCZHInitTables(void) {
     static dispatch_once_t once;
@@ -88,7 +95,7 @@ static NSDictionary *PCZHL10N(NSDictionary *orig) {
     for (NSString *ident in out.allKeys) {
         NSString *shortIdent = [ident hasPrefix:@"com.anthopak.powercuts.action."]
             ? [ident substringFromIndex:@"com.anthopak.powercuts.action.".length] : ident;
-        NSDictionary *tr = g_tr[shortIdent];
+        NSDictionary *tr = ZHTr(ident);
         if (!tr) continue;
         NSMutableDictionary *def = [out[ident] mutableCopy];
         if (!def) continue;
@@ -118,6 +125,8 @@ static IMP g_origGet = NULL;
 static IMP g_origCreate = NULL, g_origCreateMulti = NULL, g_origAdd = NULL, g_origSet = NULL;
 static NSMutableSet *g_createSeen = nil;
 
+
+
 static NSString *ZHLogDir(void) {
     static NSString *dir;
     static dispatch_once_t once;
@@ -135,7 +144,7 @@ static NSString *ZH_tplname_imp(id self, SEL _cmd) {
         NSString *ident = [self valueForKey:@"identifier"];
         if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
             NSString *si = [ident substringFromIndex:30];
-            NSDictionary *tr = g_tr[si];
+            NSDictionary *tr = ZHTr(ident);
             if (tr && tr[@"n"]) {
                 static int tl = 0;
                 if (tl < 10) {
@@ -178,7 +187,7 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
         NSString *ident = [self valueForKey:@"identifier"];
         if (![ident isKindOfClass:[NSString class]]) return orig;
         NSString *si = [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
-        NSDictionary *tr = g_tr[si];
+        NSDictionary *tr = ZHTr(ident);
         if (!tr) return orig;
         NSMutableDictionary *out = [orig mutableCopy];
         if (tr[@"n"]) out[@"name"] = tr[@"n"];
@@ -251,7 +260,7 @@ static NSString *ZH_wcname_imp(id self, SEL _cmd) {
         NSString *ident = [self valueForKey:@"identifier"];
         if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
             NSString *si = [ident substringFromIndex:30];
-            NSDictionary *tr = g_tr[si];
+            NSDictionary *tr = ZHTr(ident);
             if (tr && tr[@"n"]) {
                 static int logged = 0;
                 if (logged < 10) {
@@ -323,7 +332,7 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
                 if ([item isKindOfClass:[NSDictionary class]]) {
                     NSString *ident = item[@"identifier"];
                     NSString *si = [ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
-                    NSDictionary *tr = si ? g_tr[si] : nil;
+                    NSDictionary *tr = ZHTr(ident);
                     if (tr) {
                         NSMutableDictionary *q = [item mutableCopy];
                         if (tr[@"n"]) q[@"name"] = tr[@"n"];
