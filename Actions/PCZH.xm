@@ -293,56 +293,37 @@ static void PCZHDelayedInit(void) {
             NSMutableString *report = [NSMutableString string];
             NSString *procName = [NSProcessInfo processInfo].processName;
             [report appendFormat:@"proc=%@\n", procName];
-            // A. 文件翻译（已实证有效，保留）
-            NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
-            Dl_info di;
-            if (dladdr((void *)PCZHDelayedInit, &di) && di.dli_fname) {
-                NSString *self_ = [NSString stringWithUTF8String:di.dli_fname];
-                NSRange r = [self_ rangeOfString:@".jbroot-"];
-                if (r.location != NSNotFound) {
-                    NSString *rest = [self_ substringFromIndex:r.location];
-                    NSRange slash = [rest rangeOfString:@"/"];
-                    if (slash.location != NSNotFound) {
-                        NSString *jbroot = [self_ substringToIndex:r.location + slash.location];
-                        base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist", jbroot];
-                    }
+            // A. PCSharedBucketManager 方法名自省（类方法+实例方法全列）
+            Class pcm = objc_getClass("PCSharedBucketManager");
+            if (pcm) {
+                [report appendString:@"== PCM class methods ==\n"];
+                unsigned int cnt = 0;
+                Method *ms = class_copyMethodList(object_getClass(pcm), &cnt);
+                for (unsigned int i = 0; i < cnt; i++) [report appendFormat:@"%s\n", sel_getName(method_getName(ms[i]))];
+                free(ms);
+                [report appendString:@"== PCM instance methods ==\n"];
+                ms = class_copyMethodList(pcm, &cnt);
+                for (unsigned int i = 0; i < cnt; i++) [report appendFormat:@"%s\n", sel_getName(method_getName(ms[i]))];
+                free(ms);
+            } else [report appendString:@"PCM nil\n"];
+            // B. siriactionsd 域内容
+            NSString *sap = @"/var/mobile/Library/Preferences/com.apple.siriactionsd.plist";
+            NSDictionary *sa = [NSDictionary dictionaryWithContentsOfFile:sap];
+            if (sa) {
+                [report appendFormat:@"== siriactionsd keys: %lu ==\n", (unsigned long)sa.count];
+                for (NSString *k in sa) {
+                    id v = sa[k];
+                    [report appendFormat:@"%@ = %@\n", k, [v isKindOfClass:[NSDictionary class]] ? [NSString stringWithFormat:@"dict(%lu)", (unsigned long)[v count]] : ([v isKindOfClass:[NSArray class]] ? [NSString stringWithFormat:@"arr(%lu)", (unsigned long)[v count]] : v)];
                 }
+            } else [report appendString:@"siriactionsd plist nil\n"];
+            // C. /var/mobile/Library 下含 siri/action 的目录
+            NSArray *libs = [NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/var/mobile/Library" error:nil];
+            for (NSString *l in libs) {
+                NSString *low = l.lowercaseString;
+                if ([low containsString:@"siri"] || [low containsString:@"action"]) [report appendFormat:@"LIB-DIR: %@\n", l];
             }
-            NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:base];
-            if (file && [file[@"registeredCustomActionsData"] isKindOfClass:[NSDictionary class]]) {
-                NSMutableDictionary *pf = [file mutableCopy];
-                pf[@"registeredCustomActionsData"] = PCZHL10N(pf[@"registeredCustomActionsData"]);
-                if ([pf writeToFile:base atomically:YES]) notify_post("com.anthopak.powercuts.dataChanged");
-                [report appendString:@"file-translated ok\n"];
-            } else {
-                [report appendString:@"file miss/skip\n"];
-            }
-            // B. siriactionsd 存储探针：列目录
-            NSFileManager *fm = [NSFileManager defaultManager];
-            for (NSString *dir in @[@"/var/mobile/Library/SiriActions", @"/var/mobile/Library/Preferences"]) {
-                NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil];
-                if (items) {
-                    [report appendFormat:@"%@: %@\n", dir, items];
-                }
-            }
-            // C. 仅 SpringBoard：hook 注册器本体，orig 后翻译动作对象（Shortcuts 跳过——递归崩溃源）
-            if ([procName isEqualToString:@"SpringBoard"]) {
-                Class pcm = objc_getClass("PCSharedBucketManager");
-                SEL rs = sel_registerName("registerCustomAction:");
-                Method rm = pcm ? class_getInstanceMethod(object_getClass(pcm), rs) : NULL;
-                BOOL isCls = YES;
-                if (!rm && pcm) { rm = class_getInstanceMethod(pcm, rs); isCls = NO; }
-                if (rm) {
-                    [report appendFormat:@"hooking register (%s)\n", isCls ? "class" : "instance"];
-                    // 用fishhook式imp交换：包一层，orig后调用ZHFixAction
-                    g_origReg = method_getImplementation(rm);
-                    method_setImplementation(rm, (IMP)ZH_reg_imp);
-                } else {
-                    [report appendString:@"register method NOT found\n"];
-                }
-            }
-            [report appendString:@"mode=probe v0.4.14\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh44_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=introspect v0.4.15\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh45_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
