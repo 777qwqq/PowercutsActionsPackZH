@@ -175,9 +175,9 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
             static int pd = 0;
             if (pd < 5) {
                 pd++;
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_ppdall.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdall.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
                 [lg appendFormat:@"class=%@ ident=%@ keys=%@\n", NSStringFromClass([self class]), ({ id iv=nil; @try { iv=[self valueForKey:@"identifier"]; } @catch(id e){} iv; }), orig.allKeys];
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_ppdall.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdall.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
         }
         if (!g_ppdCache) g_ppdCache = [NSMapTable weakToStrongObjectsMapTable];
@@ -207,9 +207,9 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
         static int pl = 0;
         if (pl < 5) {
             pl++;
-            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_ppdhit.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdhit.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
             [lg appendFormat:@"%@ | keys=%@\n", ident, orig.allKeys];
-            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_ppdhit.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdhit.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         [g_ppdCache setObject:out forKey:self];
         return out;
@@ -247,9 +247,9 @@ static int g_wcNameCalls = 0;
 static NSString *ZH_wcname_imp(id self, SEL _cmd) {
     g_wcNameCalls++;
     if (g_wcNameCalls <= 10) {
-        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_who.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
         [lg appendFormat:@"#%d class=%@\n", g_wcNameCalls, NSStringFromClass([self class])];
-        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_who.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     }
     if (g_wcNameCalls <= 3 || g_wcNameCalls % 50 == 0) {
         NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_wcname.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
@@ -428,11 +428,11 @@ static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         @try {
@@ -450,10 +450,10 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {
             [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         @try {
             Class wfr = objc_getClass("WFActionRegistry");
@@ -577,11 +577,11 @@ static void PCZHDelayedInit(void) {
                     } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
                 }
             } else [report appendString:@"WFActionRegistry nil\n"];
-            [report appendString:@"step=done v0.4.31\n"];
+            [report appendString:@"step=done v0.4.32\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh61_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
