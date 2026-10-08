@@ -1,3 +1,4 @@
+#include <dlfcn.h>
 // PCZH Hook v0.4.1 — 运行时枚举 PCAction 子类逐类替换显示方法
 // 官方动作对象的 name/description/parameters/summary 全部按 identifier 映射为中文
 #import "pczh_api.h"
@@ -258,32 +259,43 @@ static void PCZHDelayedInit(void);
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
-            // 0.4.11：CFPreferences API 直读直写（registeredActionsData.plist 是键名不是文件名，
-            // 域 com.anthopak.powercuts；绕过 cfprefsd 磁盘缓存不可靠问题）
+            // 0.4.12：文件名无 .plist 后缀（原始逆向记录），且需 jbroot 解析（roothide）
             NSMutableString *report = [NSMutableString string];
-            NSString *domain = @"com.anthopak.powercuts";
-            NSString *key = @"registeredActionsData.plist";
-            CFPreferencesAppSynchronize((__bridge CFStringRef)domain);
-            NSDictionary *val = CFBridgingRelease(CFPreferencesCopyAppValue((__bridge CFStringRef)key, (__bridge CFStringRef)domain));
-            if ([val isKindOfClass:[NSDictionary class]]) {
+            NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData";
+            Dl_info di;
+            if (dladdr((void *)PCZHDelayedInit, &di) && di.dli_fname) {
+                NSString *self_ = [NSString stringWithUTF8String:di.dli_fname];
+                NSRange r = [self_ rangeOfString:@".jbroot-"];
+                if (r.location != NSNotFound) {
+                    NSString *rest = [self_ substringFromIndex:r.location];
+                    NSRange slash = [rest rangeOfString:@"/"];
+                    if (slash.location != NSNotFound) {
+                        NSString *jbroot = [self_ substringToIndex:r.location + slash.location];
+                        base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData", jbroot];
+                        [report appendFormat:@"jbroot=%@\n", jbroot];
+                    }
+                }
+            }
+            NSArray *paths = @[base, [base stringByAppendingString:@".plist"]];
+            int translated = 0;
+            for (NSString *path in paths) {
+                NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
+                if (!file) { [report appendFormat:@"MISS %@\n", path.lastPathComponent]; continue; }
+                id inner = file[@"registeredActionsData.plist"];
+                if (![inner isKindOfClass:[NSDictionary class]]) { [report appendFormat:@"NOKEY %@ keys=%@\n", path.lastPathComponent, file.allKeys]; continue; }
+                NSMutableDictionary *pf = [file mutableCopy];
                 int n = 0;
-                for (NSString *k in val) {
+                pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
+                for (NSString *k in pf[@"registeredActionsData.plist"]) {
                     if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
                 }
-                NSDictionary *tr = PCZHL10N(val);
-                CFPreferencesSetAppValue((__bridge CFStringRef)key, (__bridge CFTypeRef)tr, (__bridge CFStringRef)domain);
-                Boolean ok = CFPreferencesAppSynchronize((__bridge CFStringRef)domain);
-                notify_post("com.anthopak.powercuts.dataChanged");
-                [report appendFormat:@"CFPREFS hit actions=%d total=%lu sync=%d\n", n, (unsigned long)val.count, (int)ok];
-            } else {
-                [report appendFormat:@"CFPREFS no value (class=%@)\n", NSStringFromClass([val class])];
-                // 兜底：列出域文件本体
-                NSString *p = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.plist";
-                NSDictionary *f = [NSDictionary dictionaryWithContentsOfFile:p];
-                [report appendFormat:@"domain-file keys=%@\n", f.allKeys];
+                BOOL ok = [pf writeToFile:path atomically:YES];
+                [report appendFormat:@"HIT %@ ok=%d actions=%d\n", path.lastPathComponent, ok, n];
+                if (ok) translated++;
             }
-            [report appendString:@"mode=cfprefs v0.4.11\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh41_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            if (translated) notify_post("com.anthopak.powercuts.dataChanged");
+            [report appendFormat:@"mode=noplusplist v0.4.12 translated=%d\n", translated];
+            [report writeToFile:@"/var/mobile/Documents/pczh42_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
