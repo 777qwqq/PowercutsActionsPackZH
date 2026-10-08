@@ -4,6 +4,7 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+#import <notify.h>
 
 #pragma mark - 映射表
 
@@ -170,7 +171,7 @@ static NSDictionary *ZH_cachedData_imp(id self, SEL _cmd) {
 
 static void ZHHookClass(Class cls) {
     NSString *cn = NSStringFromClass(cls);
-    if (g_origs[[NSString stringWithFormat:@"%@|name"] ?: @""]) return;
+    if (g_origs[[NSString stringWithFormat:@"%@|%@", cn, @"name"]] != nil) return;
 #define HOOK(selName, kind, imp) do { \
     SEL s = sel_registerName(selName); \
     Method m = class_getInstanceMethod(cls, s); \
@@ -191,6 +192,7 @@ static void ZHHookClass(Class cls) {
 %ctor {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_global_queue(0, 0), ^{
         @try {
+            PCZHInitTables();
             g_origs = [NSMutableDictionary new];
             NSMutableString *report = [NSMutableString string];
             int num = objc_getClassList(NULL, 0);
@@ -238,6 +240,7 @@ static void ZHHookClass(Class cls) {
                     if ([inner isKindOfClass:[NSDictionary class]]) {
                         pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
                         [pf writeToFile:path atomically:YES];
+                        notify_post("com.anthopak.powercuts.dataChanged");
                     }
                 }
             } @catch (id e) {}
