@@ -1,7 +1,6 @@
 {
     Filter = {
         Bundles = (
-            "com.apple.springboard",
             "com.apple.shortcuts",
             "com.apple.Preferences",
             "com.apple.WorkflowKit.BackgroundShortcutRunner",

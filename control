@@ -1,6 +1,6 @@
 Package: com.moss.pczhexecutor
 Name: PCZH 执行器
-Version: 1.0.2
+Version: 1.0.3
 Architecture: iphoneos-arm64
 Description: SpringBoard 侧动作执行器，配合 TrollCuts 中文版动作使用。
 Author: Moss

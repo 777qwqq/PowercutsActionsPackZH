@@ -461,17 +461,7 @@ static void PCZHDelayedInit(void) {
                         }
                     } @catch (id e) {}
                 }
-                else if ([procName isEqualToString:@"SpringBoard"]) {
-                    // 缓存文件翻译（数据层兜底）
-                    @try {
-                        NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist"];
-                        if (file && [file[@"registeredCustomActionsData"] isKindOfClass:[NSDictionary class]]) {
-                            NSMutableDictionary *pf = [file mutableCopy];
-                            pf[@"registeredCustomActionsData"] = PCZHL10N(pf[@"registeredCustomActionsData"]);
-                            if ([pf writeToFile:@"/var/jb/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist" atomically:YES]) notify_post("com.anthopak.powercuts.dataChanged");
-                        }
-                    } @catch (id e) {}
-                }
+// SpringBoard 不在过滤器中：无 SB 侧代码}
             }
         });
 }
