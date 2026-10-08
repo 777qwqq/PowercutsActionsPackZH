@@ -351,6 +351,32 @@ static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hit
     return scanned;
 }
 
+static IMP g_origCreate = NULL;
+static NSMutableSet *g_createSeen = nil;
+static id ZH_create_imp(id self, SEL _cmd, NSString *ident, id params) {
+    id act = ((id(*)(id, SEL, id, id))g_origCreate)(self, _cmd, ident, params);
+    @try {
+        if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
+            NSString *si = [ident substringFromIndex:30];
+            NSDictionary *tr = g_tr[si];
+            if (tr && act) {
+                NSMutableString *applied = [NSMutableString string];
+                if (tr[@"n"]) { [act setValue:tr[@"n"] forKey:@"name"]; [applied appendString:@"name "]; }
+                if (tr[@"d"]) { [act setValue:tr[@"d"] forKey:@"descriptionSummary"]; [applied appendString:@"desc "]; }
+                if (tr[@"s"] && [(NSString *)tr[@"s"] length]) { [act setValue:tr[@"s"] forKey:@"parameterSummary"]; [applied appendString:@"summary "]; }
+                if (!g_createSeen) g_createSeen = [NSMutableSet new];
+                if (![g_createSeen containsObject:ident]) {
+                    [g_createSeen addObject:ident];
+                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh50_create.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                    [lg appendFormat:@"%@ | %@ | %@\n", ident, NSStringFromClass([act class]), applied];
+                    [lg writeToFile:@"/var/mobile/Documents/pczh50_create.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                }
+            }
+        }
+    } @catch (id e) {}
+    return act;
+}
+
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
@@ -365,9 +391,21 @@ static void PCZHDelayedInit(void) {
                     [report appendString:@"getter hooked\n"];
                 } else if (!gm) [report appendString:@"getter NOT found\n"];
             } else [report appendString:@"PCM nil\n"];
+            // 0.4.20：WFActionRegistry create 咽喉 hook
+            Class wfr = objc_getClass("WFActionRegistry");
+            if (wfr) {
+                SEL cs = sel_registerName("createActionWithIdentifier:serializedParameters:");
+                Method cm = class_getInstanceMethod(wfr, cs);
+                if (cm && !g_origCreate) {
+                    g_origCreate = method_getImplementation(cm);
+                    method_setImplementation(cm, (IMP)ZH_create_imp);
+                    [report appendString:@"create hooked\n"];
+                } else if (!cm) [report appendString:@"create NOT found\n"];
+            } else [report appendString:@"WFActionRegistry nil\n"];
             // 0.4.19：门控扫描——只读 metadata 识别容器身份，命中目标才扫；后台线程；开关文件可跳过
             int hits = 0;
-            if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/mobile/Documents/pczh_skip_scan"]) {
+            if (YES) { // 0.4.20 起扫描默认关
+        // if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/mobile/Documents/pczh_skip_scan"]) {
                 [report appendString:@"scan skipped by switch\n"];
             } else {
                 [report appendString:@"== scan begin (gated) ==\n"];
@@ -414,7 +452,7 @@ static void PCZHDelayedInit(void) {
                 }
                 free(cls);
             }
-            [report appendString:@"mode=fsprobe v0.4.19\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh49_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=fsprobe v0.4.20\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh50_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
