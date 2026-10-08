@@ -287,43 +287,56 @@ static void PCZHDelayedInit(void);
     }
 }
 
+static IMP g_origGet = NULL;
+static void ZHFixAction(id action);
+
+// getter 翻译：orig 结果 → 翻译副本返回。PCZHL10N 纯函数无回调，无递归面
+static id ZH_cacheGet_imp(id self, SEL _cmd) {
+    @try {
+        id v = ((id(*)(id, SEL))g_origGet)(self, _cmd);
+        if ([v isKindOfClass:[NSDictionary class]]) return PCZHL10N(v);
+        if ([v isKindOfClass:[NSArray class]]) {
+            NSMutableArray *out = [NSMutableArray array];
+            for (id item in v) {
+                if ([item isKindOfClass:[NSDictionary class]]) {
+                    NSString *ident = item[@"identifier"];
+                    NSString *shortIdent = [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
+                    NSDictionary *tr = g_tr[shortIdent];
+                    if (tr) {
+                        NSMutableDictionary *q = [item mutableCopy];
+                        NSString *nm = tr[@"n"];   if (nm) q[@"name"] = nm;
+                        NSString *ds = tr[@"d"];   if (ds) q[@"descriptionSummary"] = ds;
+                        NSString *sm = tr[@"s"];   if (sm && [sm length]) q[@"parameterSummary"] = sm;
+                        [out addObject:q];
+                        continue;
+                    }
+                }
+                [out addObject:item];
+            }
+            return out;
+        }
+        return v;
+    } @catch (id e) { return ((id(*)(id, SEL))g_origGet)(self, _cmd); }
+}
+
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             NSMutableString *report = [NSMutableString string];
-            NSString *procName = [NSProcessInfo processInfo].processName;
-            [report appendFormat:@"proc=%@\n", procName];
-            // A. PCSharedBucketManager 方法名自省（类方法+实例方法全列）
+            [report appendFormat:@"proc=%@\n", [NSProcessInfo processInfo].processName];
+            // 0.4.16：hook PCM getter（全部进程），返回翻译副本
             Class pcm = objc_getClass("PCSharedBucketManager");
             if (pcm) {
-                [report appendString:@"== PCM class methods ==\n"];
-                unsigned int cnt = 0;
-                Method *ms = class_copyMethodList(object_getClass(pcm), &cnt);
-                for (unsigned int i = 0; i < cnt; i++) [report appendFormat:@"%s\n", sel_getName(method_getName(ms[i]))];
-                free(ms);
-                [report appendString:@"== PCM instance methods ==\n"];
-                ms = class_copyMethodList(pcm, &cnt);
-                for (unsigned int i = 0; i < cnt; i++) [report appendFormat:@"%s\n", sel_getName(method_getName(ms[i]))];
-                free(ms);
-            } else [report appendString:@"PCM nil\n"];
-            // B. siriactionsd 域内容
-            NSString *sap = @"/var/mobile/Library/Preferences/com.apple.siriactionsd.plist";
-            NSDictionary *sa = [NSDictionary dictionaryWithContentsOfFile:sap];
-            if (sa) {
-                [report appendFormat:@"== siriactionsd keys: %lu ==\n", (unsigned long)sa.count];
-                for (NSString *k in sa) {
-                    id v = sa[k];
-                    [report appendFormat:@"%@ = %@\n", k, [v isKindOfClass:[NSDictionary class]] ? [NSString stringWithFormat:@"dict(%lu)", (unsigned long)[v count]] : ([v isKindOfClass:[NSArray class]] ? [NSString stringWithFormat:@"arr(%lu)", (unsigned long)[v count]] : v)];
-                }
-            } else [report appendString:@"siriactionsd plist nil\n"];
-            // C. /var/mobile/Library 下含 siri/action 的目录
-            NSArray *libs = [NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/var/mobile/Library" error:nil];
-            for (NSString *l in libs) {
-                NSString *low = l.lowercaseString;
-                if ([low containsString:@"siri"] || [low containsString:@"action"]) [report appendFormat:@"LIB-DIR: %@\n", l];
-            }
-            [report appendString:@"mode=introspect v0.4.15\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh45_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                SEL gs = sel_registerName("registeredCustomActionsCachedData");
+                Method gm = class_getInstanceMethod(pcm, gs);
+                if (gm) {
+                    g_origGet = method_getImplementation(gm);
+                    method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
+                    [report appendString:@"getter hooked\n"];
+                } else [report appendString:@"getter NOT found\n"];
+            } else [report appendString:@"PCM nil (pack未加载)\n"];
+            [report appendString:@"mode=getter v0.4.16\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh46_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
