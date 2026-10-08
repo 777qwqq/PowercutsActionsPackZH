@@ -149,9 +149,9 @@ static NSString *ZH_tplname_imp(id self, SEL _cmd) {
                 static int tl = 0;
                 if (tl < 10) {
                     tl++;
-                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh60_tplhits.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                    NSMutableString *lg = nil;
                     [lg appendFormat:@"%@ | %@\n", NSStringFromClass([self class]), tr[@"n"]];
-                    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh60_tplhits.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                    if (lg) [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh60_tplhits.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 }
                 return tr[@"n"];
             }
@@ -171,15 +171,6 @@ static NSMapTable *g_ppdCache = nil;
 static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
     @try {
         NSDictionary *orig = ((NSDictionary *(*)(id, SEL))g_origPPD)(self, _cmd);
-        {
-            static int pd = 0;
-            if (pd < 5) {
-                pd++;
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdall.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendFormat:@"class=%@ ident=%@ keys=%@\n", NSStringFromClass([self class]), ({ id iv=nil; @try { iv=[self valueForKey:@"identifier"]; } @catch(id e){} iv; }), orig.allKeys];
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdall.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            }
-        }
         if (!g_ppdCache) g_ppdCache = [NSMapTable weakToStrongObjectsMapTable];
         NSDictionary *cached = [g_ppdCache objectForKey:self];
         if (cached) return cached;
@@ -203,13 +194,6 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
                 [np addObject:q];
             }
             out[@"parameters"] = np;
-        }
-        static int pl = 0;
-        if (pl < 5) {
-            pl++;
-            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdhit.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-            [lg appendFormat:@"%@ | keys=%@\n", ident, orig.allKeys];
-            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdhit.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         [g_ppdCache setObject:out forKey:self];
         return out;
@@ -254,16 +238,7 @@ static IMP g_origWCName = NULL;
 static int g_wcNameCalls = 0;
 static NSString *ZH_wcname_imp(id self, SEL _cmd) {
     g_wcNameCalls++;
-    if (g_wcNameCalls <= 10) {
-        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-        [lg appendFormat:@"#%d class=%@\n", g_wcNameCalls, NSStringFromClass([self class])];
-        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    }
-    if (g_wcNameCalls <= 3 || g_wcNameCalls % 50 == 0) {
-        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_wcname.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-        [lg appendFormat:@"call#%d\n", g_wcNameCalls];
-        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_wcname.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    }
+
     @try {
         NSString *ident = [self valueForKey:@"identifier"];
         if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
@@ -286,17 +261,6 @@ static void ZHTranslateActionObj(id act, NSString *via) {
         if (![ident isKindOfClass:[NSString class]]) return;
         if (![ident hasPrefix:@"com.anthopak.powercuts.action."]) return;
         // 0.4.33：观察日志已移除
-        if (!g_createSeen) g_createSeen = [NSMutableSet new];
-        NSString *k2 = [NSString stringWithFormat:@"VAL|%@", ident];
-        if (![g_createSeen containsObject:k2]) {
-            [g_createSeen addObject:k2];
-            id nm = nil, ti = nil;
-            @try { nm = [act valueForKey:@"name"]; } @catch (id e) {}
-            @try { ti = [act valueForKey:@"title"]; } @catch (id e) {}
-            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_values.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-            [lg appendFormat:@"%@ name=%@ title=%@\n", ident, nm, ti];
-            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_values.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        }
     } @catch (id e) {}
 }
 
@@ -410,6 +374,30 @@ static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hit
 
 
 
+// 0.4.37：PCAction 按 identifier 查询的显示口
+static IMP g_origPCName = NULL, g_origPCDesc = NULL, g_origPCSum = NULL;
+static NSString *ZH_pcname_imp(id self, SEL _cmd, NSString *ident) {
+    @try {
+        NSDictionary *tr = ZHTr(ident);
+        if (tr && tr[@"n"]) return tr[@"n"];
+    } @catch (id e) {}
+    return ((NSString *(*)(id, SEL, NSString *))g_origPCName)(self, _cmd, ident);
+}
+static NSString *ZH_pcdesc_imp(id self, SEL _cmd, NSString *ident) {
+    @try {
+        NSDictionary *tr = ZHTr(ident);
+        if (tr && tr[@"d"]) return tr[@"d"];
+    } @catch (id e) {}
+    return ((NSString *(*)(id, SEL, NSString *))g_origPCDesc)(self, _cmd, ident);
+}
+static NSString *ZH_pcsum_imp(id self, SEL _cmd, NSString *ident) {
+    @try {
+        NSDictionary *tr = ZHTr(ident);
+        if (tr && tr[@"s"] && [(NSString *)tr[@"s"] length]) return tr[@"s"];
+    } @catch (id e) {}
+    return ((NSString *(*)(id, SEL, NSString *))g_origPCSum)(self, _cmd, ident);
+}
+
 // 0.4.36：画布卡片 WFActionParameterSummary（标题在 init 的 title 参数里传入）
 static IMP g_origSumInit = NULL, g_origSumTitle = NULL, g_origSumLocTitle = NULL;
 
@@ -484,11 +472,11 @@ static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh67_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh68_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh67_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh68_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         @try {
@@ -506,10 +494,10 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh67_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh68_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {
             [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh67_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh68_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         @try {
             Class wfr = objc_getClass("WFActionRegistry");
@@ -645,6 +633,25 @@ static void PCZHDelayedInit(void) {
                     } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
                 }
             } else [report appendString:@"WFActionRegistry nil\n"];
+                // 0.4.37：PCAction 显示查询口（画布/列表真正的数据源）
+                {
+                    Class pca = objc_getClass("PCAction");
+                    if (pca) {
+                        const char *pcsels[3] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:"};
+                        IMP *imps[3] = {&g_origPCName, &g_origPCDesc, &g_origPCSum};
+                        IMP *imps2[3] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp};
+                        for (int pi = 0; pi < 3; pi++) {
+                            Method cm = class_getInstanceMethod(pca, sel_registerName(pcsels[pi]));
+                            BOOL isClass = NO;
+                            if (!cm) { cm = class_getClassMethod(pca, sel_registerName(pcsels[pi])); isClass = YES; }
+                            if (cm && !*imps[pi]) {
+                                *imps[pi] = method_getImplementation(cm);
+                                method_setImplementation(cm, imps2[pi]);
+                                [report appendFormat:@"%s%s hooked\n", isClass ? "+" : "-", pcsels[pi]];
+                            } else if (!cm) [report appendFormat:@"%s NOT found\n", pcsels[pi]];
+                        }
+                    } else [report appendString:@"PCAction nil\n"];
+                }
                 // 0.4.36：画布卡片 hooks
                 {
                     Class wps = objc_getClass("WFActionParameterSummary");
@@ -669,11 +676,11 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.36\n"];
+            [report appendString:@"step=done v0.4.37\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh67_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh68_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
