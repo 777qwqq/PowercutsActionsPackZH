@@ -6,36 +6,26 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Theos
         run: |
           export THEOS=$HOME/theos
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xz-utils make perl git libplist-utils
-          sudo curl -sL -o /usr/local/bin/ldid https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64
-          sudo chmod +x /usr/local/bin/ldid
+          brew install ldid xz make 2>/dev/null || true
           git clone --depth 1 --recursive --shallow-submodules https://github.com/theos/theos.git $THEOS
           curl -sL https://github.com/theos/sdks/archive/refs/heads/master.zip -o sdks.zip
           unzip -q sdks.zip
           mkdir -p $THEOS/sdks
           ln -s "$PWD/sdks-master/iPhoneOS16.5.sdk" $THEOS/sdks/iPhoneOS16.5.sdk
-          mkdir -p $THEOS/toolchain
-          curl -sL https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz | tar -xJf - -C $THEOS/toolchain/
           echo "THEOS=$THEOS" >> $GITHUB_ENV
+          echo "PATH=/opt/homebrew/bin:/usr/local/bin:$PATH" >> $GITHUB_ENV
 
       - name: Build
         run: |
-          export PATH=$THEOS/toolchain/linux/iphone/bin:$PATH
           gmake package FINALPACKAGE=1 > build.log 2>&1 || { tail -60 build.log; exit 1; }
-          DP=$(ls packages/*.deb | head -1)
-          mkdir -p /tmp/inj out2 out && dpkg-deb -R "$DP" /tmp/inj
-          mkdir -p /tmp/inj/var/jb/usr/share/pczh
-          cp table.json /tmp/inj/var/jb/usr/share/pczh/table.json
-          dpkg-deb -b /tmp/inj out2/PCZH-injected.deb
-          mv out2/PCZH-injected.deb out/PCZH-injected.deb
+          mkdir -p out && cp packages/*.deb out/
 
       - name: Upload
         uses: actions/upload-artifact@v4
