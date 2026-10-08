@@ -12,23 +12,7 @@
 static NSDictionary *g_tr;   // identifier → {name, desc, summary}
 static NSDictionary *g_lab;  // 参数 Label/Placeholder 英文 → 中文
 static NSDictionary *g_setMap = nil;
-static void PCZHInitSettingsMap(void) {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        g_setMap = @{
-            @"HOW IT WORKS": @"工作原理",
-            @"USEFUL ADDITIONS": @"实用增强",
-            @"Disable Automation notifications": @"禁用自动化通知",
-            @"Automations without confirmation": @"自动化无需确认",
-            @"Allow import/export Shortcuts as files": @"允许以文件方式导入/导出快捷指令",
-            @"Allow running sensitive actions unauthenticated": @"敏感动作无需解锁验证",
-            @"Allow running sensistive actions unauthenticated": @"敏感动作无需解锁验证",
-            @"Hide top progress banner": @"隐藏顶部进度横幅",
-            @"Respring": @"注销",
-            @"Enabled (respring required)": @"启用（需注销）",
-        };
-    });
-}
+
 static NSString *ZHMap(NSString *s) {
     if (![s isKindOfClass:[NSString class]]) return nil;
     NSString *m = g_setMap[s];
@@ -71,66 +55,16 @@ static NSDictionary *ZHTr(NSString *ident) {
 static void PCZHInitTables(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        g_tr = @{
-            @"com.anthopak.powercuts.action.audioBalance": @{ @"n": @"音量平衡", @"d": @"设置左右声道音量平衡。左为 -1，右为 1。默认 0。", @"s": @"音量平衡设为 ${balanceValue}" },
-            @"com.anthopak.powercuts.action.autoTouchRunFile": @{ @"n": @"运行 LUA 文件", @"d": @"运行 AutoTouch 的 LUA 脚本。", @"s": @"" },
-            @"com.anthopak.powercuts.action.connectToBluetoothDevice": @{ @"n": @"连接/断开蓝牙设备", @"d": @"连接或断开指定名称的蓝牙设备。", @"s": @"${connect}名为 ${deviceName} 的蓝牙设备" },
-            @"com.anthopak.powercuts.action.deleteGlobalVariable": @{ @"n": @"删除全局变量", @"d": @"删除指定键的全局变量值。", @"s": @"删除键为 ${key} 的全局变量" },
-            @"com.anthopak.powercuts.action.dismissSiri": @{ @"n": @"关闭 Siri", @"d": @"关闭 Siri 界面。适用于配合 Siri 使用的快捷指令：先关闭 Siri 再执行其他动作。", @"s": @"" },
-            @"com.anthopak.powercuts.action.donate": @{ @"n": @"支持开发者", @"d": @"运行我！运行我！", @"s": @"" },
-            @"com.anthopak.powercuts.action.getAllInstalledApps": @{ @"n": @"获取全部已装应用", @"d": @"返回设备上所有已安装应用的标识符。当前返回值为文本（暂不支持数组输出），可用\"拆分文本\"以换行分隔拆分。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getAppBadgeCount": @{ @"n": @"获取应用角标数", @"d": @"获取指定应用当前的角标数。", @"s": @"获取标识符为 ${bundleId} 的应用角标数" },
-            @"com.anthopak.powercuts.action.getAppNameFromIdentifier": @{ @"n": @"获取应用信息", @"d": @"根据标识符返回已安装应用的信息。", @"s": @"获取标识符为 ${bundleId} 的应用的 ${informationType}" },
-            @"com.anthopak.powercuts.action.getBluetoothDeviceBattery": @{ @"n": @"获取蓝牙设备电量", @"d": @"返回指定名称蓝牙设备的电量。", @"s": @"获取名为 ${deviceName} 的蓝牙设备电量" },
-            @"com.anthopak.powercuts.action.getBluetoothDevices": @{ @"n": @"获取蓝牙设备", @"d": @"返回已连接或已配对的蓝牙设备。当前返回值为文本（暂不支持数组输出），可用\"拆分文本\"以换行分隔拆分。", @"s": @"获取${type}的蓝牙设备" },
-            @"com.anthopak.powercuts.action.getCurrentApp": @{ @"n": @"获取当前应用", @"d": @"返回当前前台应用的标识符。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getFileContent": @{ @"n": @"获取文本文件内容", @"d": @"以文本形式获取任意文件的内容。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getFilesFromFolderPath": @{ @"n": @"获取文件夹内容", @"d": @"获取文件夹内的所有文件与子文件夹。当前返回值为文本（暂不支持数组输出）。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getGlobalVariable": @{ @"n": @"获取全局变量", @"d": @"按键读取全局变量的值。", @"s": @"获取键为 ${key} 的全局变量值" },
-            @"com.anthopak.powercuts.action.getIsDeviceLocked": @{ @"n": @"获取设备锁定状态", @"d": @"设备已锁定时返回\"是\"，否则返回\"否\"。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getNowPlayingApp": @{ @"n": @"获取正在播放的应用", @"d": @"返回正在播放媒体的应用标识符。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getPressedButtons": @{ @"n": @"获取按下的按键", @"d": @"返回当前所有被按住的按键，可用于构建条件。可能的值：电源键、音量+、音量-。当前返回值为文本。", @"s": @"" },
-            @"com.anthopak.powercuts.action.getWorkflowRunSource": @{ @"n": @"获取运行来源", @"d": @"返回快捷指令的运行来源。可能的值：快捷指令 App、Siri、小组件、主屏幕图标、自动化等。", @"s": @"" },
-            @"com.anthopak.powercuts.action.goHome": @{ @"n": @"回到主屏幕", @"d": @"返回主屏幕。", @"s": @"" },
-            @"com.anthopak.powercuts.action.goToHomeScreenPage": @{ @"n": @"跳转主屏幕页", @"d": @"将主屏幕滚动到指定页（从 1 开始）。", @"s": @"跳到主屏幕第 ${pageIndex} 页" },
-            @"com.anthopak.powercuts.action.killApp": @{ @"n": @"结束应用", @"d": @"按标识符结束已安装的应用。", @"s": @"结束标识符为 ${bundleId} 的应用" },
-            @"com.anthopak.powercuts.action.ldRestart": @{ @"n": @"LD 重启", @"d": @"运行 LDRestart 命令。需要 ldrestarthelper 包。", @"s": @"" },
-            @"com.anthopak.powercuts.action.lock": @{ @"n": @"锁定设备", @"d": @"锁定设备。", @"s": @"" },
-            @"com.anthopak.powercuts.action.openApp": @{ @"n": @"打开应用", @"d": @"按标识符打开已安装的应用。", @"s": @"打开标识符为 ${bundleId} 的应用" },
-            @"com.anthopak.powercuts.action.quickSwitch": @{ @"n": @"快速开关", @"d": @"创建快捷指令时快速停用某些动作的开关。输出开（是）/关（否），配合\"如果\"动作使用。", @"s": @"快速开关 - ${state}" },
-            @"com.anthopak.powercuts.action.removeNotifications": @{ @"n": @"移除匹配的通知", @"d": @"移除匹配过滤条件（应用标识符或关键词）的通知。", @"s": @"" },
-            @"com.anthopak.powercuts.action.respring": @{ @"n": @"注销", @"d": @"注销设备（重启 SpringBoard）。", @"s": @"" },
-            @"com.anthopak.powercuts.action.runCommand": @{ @"n": @"运行命令", @"d": @"以 root 身份运行系统命令。", @"s": @"" },
-            @"com.anthopak.powercuts.action.safeMode": @{ @"n": @"安全模式", @"d": @"使设备进入安全模式。", @"s": @"" },
-            @"com.anthopak.powercuts.action.sendDistributedNotification": @{ @"n": @"发送分布式通知", @"d": @"向 NSDistributedNotificationCenter 发送通知（面向开发者）。", @"s": @"发送名为 ${notificationName} 的分布式通知" },
-            @"com.anthopak.powercuts.action.sendNotification": @{ @"n": @"发送通知", @"d": @"以指定应用的名义向设备发送推送通知，横幅使用该应用的图标和名称。需要 libnotifications 插件。", @"s": @"" },
-            @"com.anthopak.powercuts.action.setAppBadgeCount": @{ @"n": @"设置应用角标", @"d": @"设置指定应用的角标数。", @"s": @"将标识符为 ${bundleId} 的应用角标设为 ${badgeCount}" },
-            @"com.anthopak.powercuts.action.setGlobalVariable": @{ @"n": @"设置全局变量", @"d": @"为指定键的全局变量设置值。", @"s": @"将键为 ${key} 的全局变量设为 ${value}" },
-            @"com.anthopak.powercuts.action.showAppSwitcher": @{ @"n": @"显示多任务", @"d": @"以动画方式打开应用切换器。", @"s": @"" },
-            @"com.anthopak.powercuts.action.uiCache": @{ @"n": @"重建图标缓存", @"d": @"运行 UICache 命令。", @"s": @"" },
-            @"com.anthopak.powercuts.action.unlock": @{ @"n": @"密码解锁", @"d": @"使用传入的密码解锁设备。请谨慎使用，这可能带来安全风险。", @"s": @"使用密码 ${password} 解锁设备" },
-            @"com.anthopak.powercuts.action.wakeScreen": @{ @"n": @"唤醒屏幕", @"d": @"唤醒屏幕（模拟轻点唤醒，适合自动化或 SSH 场景）。", @"s": @"" },
-        };
-        g_lab = @{
-            @"Balance value": @"平衡值",
-            @"File Path": @"文件路径",
-            @"Device name": @"设备名称",
-            @"key": @"键名",
-            @"bundleId": @"应用标识符",
-            @"informationType": @"信息类型",
-            @"type": @"类型",
-            @"pageIndex": @"页码",
-            @"badgeCount": @"角标数",
-            @"value": @"值",
-            @"state": @"状态",
-            @"notificationName": @"通知名称",
-            @"password": @"密码",
-            @"connect": @"操作",
-            @"Label": @"标签",
-            @"Name": @"名称",
-            @"Password": @"密码",
-            @"Filter": @"过滤条件",
-        };
+        // 1.0.2：路径统一 /var/jb（roothide/Dopamine 通用符号链接），不再 dladdr
+        NSData *jd = [NSData dataWithContentsOfFile:@"/var/jb/usr/share/pczh/table.json"];
+        NSDictionary *root = jd ? [NSJSONSerialization JSONObjectWithData:jd options:0 error:nil] : nil;
+        if (root) {
+            g_tr = root[@"tr"] ?: @{};
+            g_lab = root[@"lab"] ?: @{};
+            g_setMap = root[@"settings"] ?: @{};
+        } else {
+            g_tr = @{}; g_lab = @{}; g_setMap = @{};
+        }
     });
 }
 
@@ -456,107 +390,90 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
 // Shortcuts：name/descriptionSummary/description/PPD 四 getter（显示链）
 // Preferences：PSSpecifier 精确映射（设置页）
 static void PCZHDelayedInit(void);
-static void PCZHSBDeferredInit(void);
 
 static void PCZHDelayedInit(void) {
-        PCZHInitTables();
-        NSString *procName = [NSProcessInfo processInfo].processName;
-        if ([procName isEqualToString:@"Shortcuts"]) {
-            @try {
-                Class pcm = objc_getClass("PCSharedBucketManager");
-                if (pcm) {
-                    Method gm = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
-                    if (gm && !g_origGet) {
-                        g_origGet = method_getImplementation(gm);
-                        method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
-                    }
-                }
-                Class wcc = objc_getClass("WFCustomAction");
-                if (wcc) {
-                    struct { SEL s; IMP *orig; IMP rep; } hooks[] = {
-                        { sel_registerName("name"), &g_origWCName, (IMP)ZH_wcname_imp },
-                        { sel_registerName("descriptionSummary"), &g_origWCDs, (IMP)ZH_dsummary_imp },
-                        { sel_registerName("description"), &g_origWCDesc, (IMP)ZH_desc_imp },
-                        { sel_registerName("processedParametersDic"), &g_origPPD, (IMP)ZH_ppd_imp },
-                        { sel_registerName("initWithAction:definition:title:"), NULL, NULL },
-                    };
-                    for (int hi = 0; hi < 4; hi++) {
-                        Method cm = class_getInstanceMethod(wcc, hooks[hi].s);
-                        if (cm && !*hooks[hi].orig) {
-                            *hooks[hi].orig = method_getImplementation(cm);
-                            method_setImplementation(cm, hooks[hi].rep);
+        // 1.0.2：dyld 初始化阶段零工作——全部移入延迟块（0.5 秒后台）
+        // 根因：新 bootstrap 环境 dyld 早期阶段 dladdr/字符串操作即崩（0.4.35/1.0.1 两份崩溃实证）
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_global_queue(0, 0), ^{
+            @autoreleasepool {
+                @try { PCZHInitTables(); } @catch (id e) { return; }
+                NSString *procName = [NSProcessInfo processInfo].processName;
+                if ([procName isEqualToString:@"Shortcuts"]) {
+                    @try {
+                        Class pcm = objc_getClass("PCSharedBucketManager");
+                        if (pcm) {
+                            Method gm = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
+                            if (gm && !g_origGet) {
+                                g_origGet = method_getImplementation(gm);
+                                method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
+                            }
                         }
-                    }
+                        Class wcc = objc_getClass("WFCustomAction");
+                        if (wcc) {
+                            struct { SEL s; IMP *orig; IMP rep; } hooks[] = {
+                                { sel_registerName("name"), &g_origWCName, (IMP)ZH_wcname_imp },
+                                { sel_registerName("descriptionSummary"), &g_origWCDs, (IMP)ZH_dsummary_imp },
+                                { sel_registerName("description"), &g_origWCDesc, (IMP)ZH_desc_imp },
+                                { sel_registerName("processedParametersDic"), &g_origPPD, (IMP)ZH_ppd_imp },
+                            };
+                            for (int hi = 0; hi < 4; hi++) {
+                                Method cm = class_getInstanceMethod(wcc, hooks[hi].s);
+                                if (cm && !*hooks[hi].orig) {
+                                    *hooks[hi].orig = method_getImplementation(cm);
+                                    method_setImplementation(cm, hooks[hi].rep);
+                                }
+                            }
+                        }
+                        Class wps = objc_getClass("WFActionParameterSummary");
+                        if (wps) {
+                            Method im = class_getInstanceMethod(wps, sel_registerName("initWithAction:definition:title:"));
+                            if (im && !g_origSumInit) {
+                                g_origSumInit = method_getImplementation(im);
+                                method_setImplementation(im, (IMP)ZH_suminit_imp);
+                            }
+                            Method tm = class_getInstanceMethod(wps, sel_registerName("title"));
+                            if (tm && !g_origSumTitle) {
+                                g_origSumTitle = method_getImplementation(tm);
+                                method_setImplementation(tm, (IMP)ZH_sumtitle_imp);
+                            }
+                            Method lm = class_getInstanceMethod(wps, sel_registerName("localizedTitle"));
+                            if (lm && !g_origSumLocTitle) {
+                                g_origSumLocTitle = method_getImplementation(lm);
+                                method_setImplementation(lm, (IMP)ZH_sumloctitle_imp);
+                            }
+                        }
+                    } @catch (id e) {}
                 }
-                Class wps = objc_getClass("WFActionParameterSummary");
-                if (wps) {
-                    Method im = class_getInstanceMethod(wps, sel_registerName("initWithAction:definition:title:"));
-                    if (im && !g_origSumInit) {
-                        g_origSumInit = method_getImplementation(im);
-                        method_setImplementation(im, (IMP)ZH_suminit_imp);
-                    }
-                    Method tm = class_getInstanceMethod(wps, sel_registerName("title"));
-                    if (tm && !g_origSumTitle) {
-                        g_origSumTitle = method_getImplementation(tm);
-                        method_setImplementation(tm, (IMP)ZH_sumtitle_imp);
-                    }
-                    Method lm = class_getInstanceMethod(wps, sel_registerName("localizedTitle"));
-                    if (lm && !g_origSumLocTitle) {
-                        g_origSumLocTitle = method_getImplementation(lm);
-                        method_setImplementation(lm, (IMP)ZH_sumloctitle_imp);
-                    }
+                else if ([procName isEqualToString:@"Preferences"]) {
+                    @try {
+                        Class psc = objc_getClass("PSSpecifier");
+                        if (psc) {
+                            Method nm = class_getInstanceMethod(psc, sel_registerName("name"));
+                            if (nm && !g_origSpecName) {
+                                g_origSpecName = method_getImplementation(nm);
+                                method_setImplementation(nm, (IMP)ZH_specname_imp);
+                            }
+                            Method pm = class_getInstanceMethod(psc, sel_registerName("propertyForKey:"));
+                            if (pm && !g_origSpecProp) {
+                                g_origSpecProp = method_getImplementation(pm);
+                                method_setImplementation(pm, (IMP)ZH_specprop_imp);
+                            }
+                        }
+                    } @catch (id e) {}
                 }
-            } @catch (id e) {}
-        }
-        else if ([procName isEqualToString:@"Preferences"]) {
-            @try {
-                PCZHInitSettingsMap();
-                Class psc = objc_getClass("PSSpecifier");
-                if (psc) {
-                    Method nm = class_getInstanceMethod(psc, sel_registerName("name"));
-                    if (nm && !g_origSpecName) {
-                        g_origSpecName = method_getImplementation(nm);
-                        method_setImplementation(nm, (IMP)ZH_specname_imp);
-                    }
-                    Method pm = class_getInstanceMethod(psc, sel_registerName("propertyForKey:"));
-                    if (pm && !g_origSpecProp) {
-                        g_origSpecProp = method_getImplementation(pm);
-                        method_setImplementation(pm, (IMP)ZH_specprop_imp);
-                    }
-                }
-            } @catch (id e) {}
-        }
-        else if ([procName isEqualToString:@"SpringBoard"]) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_global_queue(0, 0), ^{
-                PCZHSBDeferredInit();
-            });
-        }
-}
-
-static void PCZHSBDeferredInit(void) {
-        @try {
-            PCZHInitTables();
-            NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
-            Dl_info di;
-            if (dladdr((void *)PCZHSBDeferredInit, &di) && di.dli_fname) {
-                NSString *self_ = [NSString stringWithUTF8String:di.dli_fname];
-                NSRange r = [self_ rangeOfString:@".jbroot-"];
-                if (r.location != NSNotFound) {
-                    NSString *rest = [self_ substringFromIndex:r.location];
-                    NSRange slash = [rest rangeOfString:@"/"];
-                    if (slash.location != NSNotFound) {
-                        NSString *jbroot = [self_ substringToIndex:r.location + slash.location];
-                        base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist", jbroot];
-                    }
+                else if ([procName isEqualToString:@"SpringBoard"]) {
+                    // 缓存文件翻译（数据层兜底）
+                    @try {
+                        NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist"];
+                        if (file && [file[@"registeredCustomActionsData"] isKindOfClass:[NSDictionary class]]) {
+                            NSMutableDictionary *pf = [file mutableCopy];
+                            pf[@"registeredCustomActionsData"] = PCZHL10N(pf[@"registeredCustomActionsData"]);
+                            if ([pf writeToFile:@"/var/jb/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist" atomically:YES]) notify_post("com.anthopak.powercuts.dataChanged");
+                        }
+                    } @catch (id e) {}
                 }
             }
-            NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:base];
-            if (file && [file[@"registeredCustomActionsData"] isKindOfClass:[NSDictionary class]]) {
-                NSMutableDictionary *pf = [file mutableCopy];
-                pf[@"registeredCustomActionsData"] = PCZHL10N(pf[@"registeredCustomActionsData"]);
-                if ([pf writeToFile:base atomically:YES]) notify_post("com.anthopak.powercuts.dataChanged");
-            }
-        } @catch (id e) {}
+        });
 }
 
 %ctor {
