@@ -9,3 +9,4 @@ zz_pczh_FILES = $(wildcard Actions/*.xm)
 zz_pczh_CFLAGS = -fobjc-arc -w -fno-modules -I$(PWD)/include
 
 include $(THEOS_MAKE_PATH)/tweak.mk
+zz_pczh_LDFLAGS = -Wl,-fixup_chains
