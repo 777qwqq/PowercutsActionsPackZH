@@ -30,7 +30,12 @@ jobs:
         run: |
           export PATH=$THEOS/toolchain/linux/iphone/bin:$PATH
           gmake package FINALPACKAGE=1 > build.log 2>&1 || { tail -60 build.log; exit 1; }
-          mkdir -p out && cp packages/*.deb out/
+          DP=$(ls packages/*.deb | head -1)
+          mkdir -p /tmp/inj && dpkg-deb -R "$DP" /tmp/inj
+          mkdir -p /tmp/inj/var/jb/usr/share/pczh
+          cp table.json /tmp/inj/var/jb/usr/share/pczh/table.json
+          dpkg-deb -b /tmp/inj out/PCZH-injected.deb
+          rm -f out/com.moss.*.deb
 
       - name: Upload
         uses: actions/upload-artifact@v4
