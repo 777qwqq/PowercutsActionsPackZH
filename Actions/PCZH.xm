@@ -132,6 +132,37 @@ static NSArray *ZH_cparams_imp(id self, SEL _cmd, NSString *ident) {
     return out;
 }
 
+
+static IMP g_origReg = NULL;
+static void ZHFixAction(id action);
+static void ZH_reg_imp(id self, SEL _cmd, id action) {
+    ((void (*)(id, SEL, id))g_origReg)(self, _cmd, action);
+    ZHFixAction(action);
+}
+
+// 0.4.14：注册器翻译（仅 SpringBoard）。orig 后改写动作对象的显示字段——不拦调用流，无递归面
+static NSMutableSet *g_regSeen = nil;
+static void ZHFixAction(id action) {
+    @try {
+        if (![action isKindOfClass:objc_getClass("PCAction")]) return;
+        NSString *ident = nil;
+        id iv = [action valueForKey:@"identifier"];
+        if ([iv isKindOfClass:[NSString class]]) ident = iv;
+        if (!ident) return;
+        NSString *shortIdent = [ident hasPrefix:@"com.anthopak.powercuts.action."]
+            ? [ident substringFromIndex:@"com.anthopak.powercuts.action.".length] : ident;
+        NSDictionary *tr = g_tr[shortIdent];
+        if (!tr) return;
+        NSString *nm = tr[@"n"];
+        if (nm) [action setValue:nm forKey:@"name"];
+        NSString *ds = tr[@"d"];
+        if (ds) [action setValue:ds forKey:@"descriptionSummary"];
+        NSString *sm = tr[@"s"];
+        if (sm && [sm length]) [action setValue:sm forKey:@"parameterSummary"];
+        if (!g_regSeen) g_regSeen = [NSMutableSet new];
+        [g_regSeen addObject:ident];
+    } @catch (id e) {}
+}
 #pragma mark - 替换实现
 
 static NSString *ZH_name_imp(id self, SEL _cmd, NSString *ident) {
@@ -294,20 +325,20 @@ static void PCZHDelayedInit(void) {
                     [report appendFormat:@"%@: %@\n", dir, items];
                 }
             }
-            // C. 仅 SpringBoard：注册时翻译动作对象（Shortcuts 跳过——递归崩溃源）
+            // C. 仅 SpringBoard：hook 注册器本体，orig 后翻译动作对象（Shortcuts 跳过——递归崩溃源）
             if ([procName isEqualToString:@"SpringBoard"]) {
                 Class pcm = objc_getClass("PCSharedBucketManager");
-                if (pcm) {
-                    SEL rs = sel_registerName("registerCustomAction:");
-                    Method rm = class_getInstanceMethod(object_getClass(pcm), rs); // 类方法
-                    if (!rm) rm = class_getInstanceMethod(pcm, rs); // 实例方法兜底
-                    if (rm) {
-                        [report appendString:@"register method found\n"];
-                    } else {
-                        [report appendString:@"register method NOT found\n"];
-                    }
+                SEL rs = sel_registerName("registerCustomAction:");
+                Method rm = pcm ? class_getInstanceMethod(object_getClass(pcm), rs) : NULL;
+                BOOL isCls = YES;
+                if (!rm && pcm) { rm = class_getInstanceMethod(pcm, rs); isCls = NO; }
+                if (rm) {
+                    [report appendFormat:@"hooking register (%s)\n", isCls ? "class" : "instance"];
+                    // 用fishhook式imp交换：包一层，orig后调用ZHFixAction
+                    g_origReg = method_getImplementation(rm);
+                    method_setImplementation(rm, (IMP)ZH_reg_imp);
                 } else {
-                    [report appendString:@"PCSharedBucketManager nil in SB\n"];
+                    [report appendString:@"register method NOT found\n"];
                 }
             }
             [report appendString:@"mode=probe v0.4.14\n"];
