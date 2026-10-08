@@ -22,6 +22,8 @@ jobs:
           unzip -q sdks.zip
           mkdir -p $THEOS/sdks
           ln -s "$PWD/sdks-master/iPhoneOS16.5.sdk" $THEOS/sdks/iPhoneOS16.5.sdk
+          mkdir -p $THEOS/toolchain
+          curl -sL https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz | tar -xJf - -C $THEOS/toolchain/
           echo "THEOS=$THEOS" >> $GITHUB_ENV
 
       - name: Build
