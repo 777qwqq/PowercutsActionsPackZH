@@ -4,8 +4,8 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = PCZHExecutor
-PCZHExecutor_FILES = $(wildcard Actions/*.xm)
-PCZHExecutor_CFLAGS = -fobjc-arc -w -fno-modules -I$(PWD)/include
+TWEAK_NAME = zz_pczh
+zz_pczh_FILES = $(wildcard Actions/*.xm)
+zz_pczh_CFLAGS = -fobjc-arc -w -fno-modules -I$(PWD)/include
 
 include $(THEOS_MAKE_PATH)/tweak.mk

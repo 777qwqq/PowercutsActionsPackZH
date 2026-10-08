@@ -251,8 +251,15 @@ static void ZHHookClass(Class cls) {
 #undef CHOOK
 }
 
+static void PCZHDelayedInit(void);
+
 %ctor {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_global_queue(0, 0), ^{
+    @autoreleasepool {
+    PCZHDelayedInit();
+    }
+}
+
+static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             g_origs = [NSMutableDictionary new];
@@ -277,7 +284,7 @@ static void ZHHookClass(Class cls) {
             }
             free(classes);
             [report insertString:[NSString stringWithFormat:@"hooked=%d PCAction=%@\n", hooked, pcAction ? @"存在" : @"不存在"] atIndex:0];
-            [report writeToFile:@"/var/mobile/Documents/pczh34_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:@"/var/mobile/Documents/pczh37_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
 
             // getter swizzle: 缓存读取全走中文
             Class bm = objc_getClass("PCSharedBucketManager");
@@ -307,5 +314,5 @@ static void ZHHookClass(Class cls) {
                 }
             } @catch (id e) {}
         } @catch (id e) {}
-    });
 }
+
