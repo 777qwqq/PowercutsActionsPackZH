@@ -368,7 +368,7 @@ static void PCZHDelayedInit(void) {
             int hits = 0;
             [report appendString:@"== scan begin ==\n"];
             NSFileManager *fm = [NSFileManager defaultManager];
-            for (NSString *root in @[@"/var/mobile/Containers/Shared/AppGroup", @"/var/db"]) {
+            for (NSString *root in @[@"/var/mobile/Containers/Shared/AppGroup", @"/var/db", @"/var/mobile/Containers/Data/Application"]) {
                 NSArray *items = [fm contentsOfDirectoryAtPath:root error:nil];
                 if (!items) { [report appendFormat:@"skip %@\n", root]; continue; }
                 for (NSString *sub in items) {
@@ -389,7 +389,27 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"== scan done hits=%d ==\n", hits];
-            [report appendString:@"mode=fsprobe v0.4.17\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh47_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            // WFActionRegistry* 类自省（显示层规划）
+            int num2 = objc_getClassList(NULL, 0);
+            if (num2 > 0) {
+                Class *cls = (__unsafe_unretained Class *)malloc(sizeof(Class) * num2);
+                objc_getClassList(cls, num2);
+                for (int i = 0; i < num2; i++) {
+                    const char *nm = class_getName(cls[i]);
+                    if (strncmp(nm, "WFActionRegistry", 16) == 0) {
+                        [report appendFormat:@"== %@ ==\n", [NSString stringWithUTF8String:nm]];
+                        unsigned int mc = 0;
+                        Method *ms = class_copyMethodList(object_getClass(cls[i]), &mc);
+                        for (unsigned int j = 0; j < mc && j < 40; j++) [report appendFormat:@"+ %s\n", sel_getName(method_getName(ms[j]))];
+                        free(ms);
+                        ms = class_copyMethodList(cls[i], &mc);
+                        for (unsigned int j = 0; j < mc && j < 60; j++) [report appendFormat:@"- %s\n", sel_getName(method_getName(ms[j]))];
+                        free(ms);
+                    }
+                }
+                free(cls);
+            }
+            [report appendString:@"mode=fsprobe v0.4.18\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh48_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
