@@ -89,11 +89,11 @@ static void PCZHInitTables(void) {
             g_tr = @{}; g_lab = @{}; g_setMap = @{};
         }
         @try {
-            NSURL *g = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.is.workflow.shortcuts"];
-            NSString *sp = [(g.path ?: @"/tmp") stringByAppendingPathComponent:@"pczh66_state.txt"];
             NSMutableString *st = [NSMutableString string];
             [st appendFormat:@"used=%@\nroot加载=%@\ntr=%lu\n", used ?: @"(none)", root ? @"OK" : @"FAIL", (unsigned long)g_tr.count];
-            [st writeToFile:sp atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            NSURL *g = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.is.workflow.shortcuts"];
+            if (g) [st writeToFile:[g.path stringByAppendingPathComponent:@"pczh66_state.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [st writeToFile:@"/var/mobile/Documents/pczh66_state.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
     });
 }
@@ -245,19 +245,7 @@ static NSArray *ZH_actions_imp(id self, SEL _cmd) {
 static IMP g_origWCName = NULL;
 static int g_wcNameCalls = 0;
 static NSString *ZH_wcname_imp(id self, SEL _cmd) {
-    g_wcNameCalls++;
-
-    @try {
-        NSString *ident = [self valueForKey:@"identifier"];
-        if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
-            NSString *si = [ident substringFromIndex:30];
-            NSDictionary *tr = ZHTr(ident);
-            if (tr && tr[@"n"]) {
-                return tr[@"n"];
-            }
-        }
-    } @catch (id e) {}
-    return ((NSString *(*)(id, SEL))g_origWCName)(self, _cmd);
+    return @"【注入测试OK】";
 }
 
 
@@ -498,6 +486,15 @@ static void PCZHDelayedInit(void) {
 
 %ctor {
     @autoreleasepool {
+        // 1.1.0：加载标记（ctor 第一件事，区分"没注入"与"代码没跑"）
+        @try {
+            NSMutableString *mk = [NSMutableString string];
+            [mk appendFormat:@"loaded proc=%@\n", [NSProcessInfo processInfo].processName];
+            NSURL *g = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.is.workflow.shortcuts"];
+            if (g) [mk writeToFile:[g.path stringByAppendingPathComponent:@"pczh67_marker.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [mk writeToFile:@"/var/jb/var/mobile/pczh67_marker.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [mk writeToFile:@"/var/mobile/Documents/pczh67_marker.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        } @catch (id e) {}
         PCZHDelayedInit();
     }
 }
