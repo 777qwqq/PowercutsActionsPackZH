@@ -259,9 +259,10 @@ static void PCZHDelayedInit(void);
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
-            // 0.4.13：真结构实证（0.4.12 报告）——<jbroot>/var/mobile/Library/Preferences/
-            // com.anthopak.powercuts.registeredActionsData.plist，内层键 registeredCustomActionsData
             NSMutableString *report = [NSMutableString string];
+            NSString *procName = [NSProcessInfo processInfo].processName;
+            [report appendFormat:@"proc=%@\n", procName];
+            // A. 文件翻译（已实证有效，保留）
             NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
             Dl_info di;
             if (dladdr((void *)PCZHDelayedInit, &di) && di.dli_fname) {
@@ -273,31 +274,44 @@ static void PCZHDelayedInit(void) {
                     if (slash.location != NSNotFound) {
                         NSString *jbroot = [self_ substringToIndex:r.location + slash.location];
                         base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist", jbroot];
-                        [report appendFormat:@"jbroot=%@\n", jbroot];
                     }
                 }
             }
             NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:base];
-            if (!file) { [report appendString:@"FILE MISS\n"]; }
-            else {
+            if (file && [file[@"registeredCustomActionsData"] isKindOfClass:[NSDictionary class]]) {
                 NSMutableDictionary *pf = [file mutableCopy];
-                id data = pf[@"registeredCustomActionsData"];
-                if (![data isKindOfClass:[NSDictionary class]]) {
-                    [report appendFormat:@"BAD keys=%@\n", file.allKeys];
-                } else {
-                    int n = 0;
-                    NSDictionary *tr = PCZHL10N(data);
-                    for (NSString *k in tr) {
-                        if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
-                    }
-                    pf[@"registeredCustomActionsData"] = tr;
-                    BOOL ok = [pf writeToFile:base atomically:YES];
-                    [report appendFormat:@"TRANSLATED actions=%d ok=%d\n", n, ok];
-                    if (ok) notify_post("com.anthopak.powercuts.dataChanged");
+                pf[@"registeredCustomActionsData"] = PCZHL10N(pf[@"registeredCustomActionsData"]);
+                if ([pf writeToFile:base atomically:YES]) notify_post("com.anthopak.powercuts.dataChanged");
+                [report appendString:@"file-translated ok\n"];
+            } else {
+                [report appendString:@"file miss/skip\n"];
+            }
+            // B. siriactionsd 存储探针：列目录
+            NSFileManager *fm = [NSFileManager defaultManager];
+            for (NSString *dir in @[@"/var/mobile/Library/SiriActions", @"/var/mobile/Library/Preferences"]) {
+                NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil];
+                if (items) {
+                    [report appendFormat:@"%@: %@\n", dir, items];
                 }
             }
-            [report appendString:@"mode=realkey v0.4.13\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh43_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            // C. 仅 SpringBoard：注册时翻译动作对象（Shortcuts 跳过——递归崩溃源）
+            if ([procName isEqualToString:@"SpringBoard"]) {
+                Class pcm = objc_getClass("PCSharedBucketManager");
+                if (pcm) {
+                    SEL rs = sel_registerName("registerCustomAction:");
+                    Method rm = class_getInstanceMethod(object_getClass(pcm), rs); // 类方法
+                    if (!rm) rm = class_getInstanceMethod(pcm, rs); // 实例方法兜底
+                    if (rm) {
+                        [report appendString:@"register method found\n"];
+                    } else {
+                        [report appendString:@"register method NOT found\n"];
+                    }
+                } else {
+                    [report appendString:@"PCSharedBucketManager nil in SB\n"];
+                }
+            }
+            [report appendString:@"mode=probe v0.4.14\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh44_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
