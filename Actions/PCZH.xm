@@ -639,7 +639,7 @@ static void PCZHDelayedInit(void) {
                     if (pca) {
                         const char *pcsels[3] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:"};
                         IMP *imps[3] = {&g_origPCName, &g_origPCDesc, &g_origPCSum};
-                        IMP *imps2[3] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp};
+                        IMP imps2[3] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp};
                         for (int pi = 0; pi < 3; pi++) {
                             Method cm = class_getInstanceMethod(pca, sel_registerName(pcsels[pi]));
                             BOOL isClass = NO;
