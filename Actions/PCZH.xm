@@ -123,14 +123,14 @@ static void ZHLogAction(id act, NSString *ident, NSString *via) {
     NSString *key = [NSString stringWithFormat:@"%@|%@", via, ident];
     if ([g_createSeen containsObject:key]) return;
     [g_createSeen addObject:key];
-    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh51_create.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh52_create.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
     NSMutableString *props = [NSMutableString string];
     unsigned int pc = 0;
     objc_property_t *pl = class_copyPropertyList([act class], &pc);
     for (unsigned int i2 = 0; i2 < pc && i2 < 30; i2++) [props appendFormat:@"%s ", property_getName(pl[i2])];
     free(pl);
     [lg appendFormat:@"%@ | %@ | %@ | props: %@\n", via, ident, NSStringFromClass([act class]), props];
-    [lg writeToFile:@"/var/mobile/Documents/pczh51_create.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    [lg writeToFile:@"/var/mobile/Documents/pczh52_create.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 static void ZHTranslateActionObj(id act, NSString *via) {
@@ -149,11 +149,20 @@ static void ZHTranslateActionObj(id act, NSString *via) {
     } @catch (id e) {}
 }
 
-// PCM getter：返回翻译副本
+// PCM getter：翻译一次后记忆化——固定返回同一对象，避免 KVO 变更检测死循环（0.4.20 卡顿根因）
+static NSMutableDictionary *g_getterCache = nil; // proc|origClass -> translated
 static id ZH_cacheGet_imp(id self, SEL _cmd) {
     @try {
         id v = ((id(*)(id, SEL))g_origGet)(self, _cmd);
-        if ([v isKindOfClass:[NSDictionary class]]) return PCZHL10N(v);
+        if (!g_getterCache) g_getterCache = [NSMutableDictionary new];
+        NSString *ck = NSStringFromClass([v class]);
+        id cached = g_getterCache[ck];
+        if (cached) return cached;
+        if ([v isKindOfClass:[NSDictionary class]]) {
+            id t = PCZHL10N(v);
+            if (t) g_getterCache[ck] = t;
+            return t;
+        }
         if ([v isKindOfClass:[NSArray class]]) {
             NSMutableArray *out = [NSMutableArray array];
             for (id item in v) {
@@ -176,8 +185,10 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
                 }
                 [out addObject:item];
             }
+            g_getterCache[ck] = out;
             return out;
         }
+        g_getterCache[ck] = v;
         return v;
     } @catch (id e) { return ((id(*)(id, SEL))g_origGet)(self, _cmd); }
 }
@@ -252,8 +263,8 @@ static void PCZHDelayedInit(void) {
             } else {
                 [report appendString:@"registry hooks skipped (not Shortcuts)\n"];
             }
-            [report appendString:@"mode=choke v0.4.21\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh51_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=choke v0.4.22\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh52_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
