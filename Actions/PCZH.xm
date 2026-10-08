@@ -337,7 +337,8 @@ static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hit
             scanned += ZHScanDir(report, p, depth + 1, hits);
         } else {
             unsigned long long sz = [st fileSize];
-            if (sz == 0 || sz > 15 * 1024 * 1024) continue;
+            if (sz == 0 || sz > 5 * 1024 * 1024) continue;
+            if ([f containsString:@"Caches"] || [f containsString:@"SplashBoard"]) continue;
             NSData *d = [NSData dataWithContentsOfFile:p];
             if (!d) continue;
             scanned++;
@@ -364,28 +365,32 @@ static void PCZHDelayedInit(void) {
                     [report appendString:@"getter hooked\n"];
                 } else if (!gm) [report appendString:@"getter NOT found\n"];
             } else [report appendString:@"PCM nil\n"];
-            // 0.4.17：文件系统内容搜索
+            // 0.4.19：门控扫描——只读 metadata 识别容器身份，命中目标才扫；后台线程；开关文件可跳过
             int hits = 0;
-            [report appendString:@"== scan begin ==\n"];
-            NSFileManager *fm = [NSFileManager defaultManager];
-            for (NSString *root in @[@"/var/mobile/Containers/Shared/AppGroup", @"/var/db", @"/var/mobile/Containers/Data/Application"]) {
-                NSArray *items = [fm contentsOfDirectoryAtPath:root error:nil];
-                if (!items) { [report appendFormat:@"skip %@\n", root]; continue; }
-                for (NSString *sub in items) {
-                    NSString *p = [root stringByAppendingPathComponent:sub];
-                    BOOL isDir = NO;
-                    [fm fileExistsAtPath:p isDirectory:&isDir];
-                    if (isDir) ZHScanDir(report, p, 1, &hits);
-                    else {
-                        NSDictionary *st = [fm attributesOfItemAtPath:p error:nil];
-                        if (st && st.fileSize > 0 && st.fileSize < 15*1024*1024) {
-                            NSData *d = [NSData dataWithContentsOfFile:p];
-                            if (d && d.length > 100 && memmem(d.bytes, d.length, "com.anthopak.powercuts.action", 29)) {
-                                hits++;
-                                [report appendFormat:@"HIT: %@ (%llu KB)\n", p, st.fileSize / 1024];
-                            }
-                        }
-                    }
+            if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/mobile/Documents/pczh_skip_scan"]) {
+                [report appendString:@"scan skipped by switch\n"];
+            } else {
+                [report appendString:@"== scan begin (gated) ==\n"];
+                NSFileManager *fm = [NSFileManager defaultManager];
+                NSString *containers = @"/var/mobile/Containers/Data/Application";
+                for (NSString *uuid in [fm contentsOfDirectoryAtPath:containers error:nil]) {
+                    if (hits > 20) break;
+                    NSString *cpath = [containers stringByAppendingPathComponent:uuid];
+                    NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
+                    NSString *bid = meta[@"MCMMetadataIdentifier"];
+                    if (![bid containsString:@"shortcuts"] && ![bid containsString:@"siriactionsd"] && ![bid containsString:@"WorkflowKit"]) continue;
+                    [report appendFormat:@"SCAN-C: %@ (%@)\n", uuid, bid];
+                    hits += ZHScanDir(report, cpath, 2, &hits);
+                }
+                NSString *sg = @"/var/mobile/Containers/Shared/AppGroup";
+                for (NSString *uuid in [fm contentsOfDirectoryAtPath:sg error:nil]) {
+                    if (hits > 30) break;
+                    NSString *cpath = [sg stringByAppendingPathComponent:uuid];
+                    NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
+                    NSString *bid = meta[@"MCMMetadataIdentifier"] ?: @"";
+                    if (![bid containsString:@"shortcuts"] && ![bid containsString:@"siriactionsd"] && ![bid containsString:@"WorkflowKit"]) continue;
+                    [report appendFormat:@"SCAN-G: %@ (%@)\n", uuid, bid];
+                    hits += ZHScanDir(report, cpath, 2, &hits);
                 }
             }
             [report appendFormat:@"== scan done hits=%d ==\n", hits];
@@ -409,7 +414,7 @@ static void PCZHDelayedInit(void) {
                 }
                 free(cls);
             }
-            [report appendString:@"mode=fsprobe v0.4.18\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh48_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=fsprobe v0.4.19\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh49_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
