@@ -259,11 +259,6 @@ static NSString *ZH_wcname_imp(id self, SEL _cmd) {
         [lg appendFormat:@"#%d class=%@\n", g_wcNameCalls, NSStringFromClass([self class])];
         [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     }
-    if (g_wcNameCalls <= 3 || g_wcNameCalls % 50 == 0) {
-        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_wcname.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-        [lg appendFormat:@"call#%d\n", g_wcNameCalls];
-        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_wcname.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    }
     @try {
         NSString *ident = [self valueForKey:@"identifier"];
         if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
@@ -287,16 +282,7 @@ static void ZHTranslateActionObj(id act, NSString *via) {
         if (![ident hasPrefix:@"com.anthopak.powercuts.action."]) return;
         // 0.4.33：观察日志已移除
         if (!g_createSeen) g_createSeen = [NSMutableSet new];
-        NSString *k2 = [NSString stringWithFormat:@"VAL|%@", ident];
-        if (![g_createSeen containsObject:k2]) {
-            [g_createSeen addObject:k2];
-            id nm = nil, ti = nil;
-            @try { nm = [act valueForKey:@"name"]; } @catch (id e) {}
-            @try { ti = [act valueForKey:@"title"]; } @catch (id e) {}
-            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_values.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-            [lg appendFormat:@"%@ name=%@ title=%@\n", ident, nm, ti];
-            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh58_values.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        }
+
     } @catch (id e) {}
 }
 
