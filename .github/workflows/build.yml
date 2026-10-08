@@ -14,7 +14,7 @@ jobs:
         run: |
           export THEOS=$HOME/theos
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xz-utils make perl git
+          sudo apt-get install -y -qq xz-utils make perl git libplist-utils
           sudo curl -sL -o /usr/local/bin/ldid https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64
           sudo chmod +x /usr/local/bin/ldid
           git clone --depth 1 --recursive --shallow-submodules https://github.com/theos/theos.git $THEOS
