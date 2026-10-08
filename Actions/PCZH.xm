@@ -82,128 +82,6 @@ static void PCZHInitTables(void) {
 
 static NSMutableDictionary *g_origs;  // "类名|方法类型" → NSValue(IMP)
 
-static IMP ZHOrig(id self, NSString *kind) {
-    return (IMP)[g_origs[[NSString stringWithFormat:@"%@|%@", NSStringFromClass([self class]), kind]] pointerValue];
-}
-
-
-static NSMutableSet *g_calls = nil;
-static IMP ZHOrigM(id self, NSString *kind) {
-    return (IMP)[g_origs[[NSString stringWithFormat:@"M_%@|%@", NSStringFromClass(self), kind]] pointerValue];
-}
-static void ZHLogCall(NSString *ident) {
-    if (!g_calls) g_calls = [NSMutableSet new];
-    if ([g_calls containsObject:ident]) return;
-    [g_calls addObject:ident];
-    NSMutableString *log = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh36_calls.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-    [log appendFormat:@"%@\n", ident];
-    [log writeToFile:@"/var/mobile/Documents/pczh36_calls.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-}
-static NSString *ZH_cname_imp(id self, SEL _cmd, NSString *ident) {
-    ZHLogCall(ident);
-    NSDictionary *tr = g_tr[ident];
-    if (tr[@"n"]) return tr[@"n"];
-    IMP o = ZHOrigM(self, @"cname");
-    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : ident;
-}
-static NSString *ZH_cdesc_imp(id self, SEL _cmd, NSString *ident) {
-    NSDictionary *tr = g_tr[ident];
-    if (tr[@"d"]) return tr[@"d"];
-    IMP o = ZHOrigM(self, @"cdesc");
-    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : @"";
-}
-static NSString *ZH_csummary_imp(id self, SEL _cmd, NSString *ident) {
-    NSDictionary *tr = g_tr[ident];
-    if (tr[@"s"] && [(NSString *)tr[@"s"] length]) return tr[@"s"];
-    IMP o = ZHOrigM(self, @"csummary");
-    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : @"";
-}
-static NSArray *ZH_cparams_imp(id self, SEL _cmd, NSString *ident) {
-    IMP o = ZHOrigM(self, @"cparams");
-    NSArray *arr = o ? ((NSArray *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : nil;
-    if (!arr.count) return arr;
-    NSMutableArray *out = [NSMutableArray array];
-    for (NSDictionary *p in arr) {
-        NSMutableDictionary *q = [p mutableCopy];
-        id lab = q[@"Label"];      if (lab) q[@"Label"] = g_lab[lab] ?: lab;
-        id ph  = q[@"Placeholder"]; if (ph) q[@"Placeholder"] = g_lab[ph] ?: ph;
-        [out addObject:q];
-    }
-    return out;
-}
-
-
-static IMP g_origReg = NULL;
-static void ZHFixAction(id action);
-static void ZH_reg_imp(id self, SEL _cmd, id action) {
-    ((void (*)(id, SEL, id))g_origReg)(self, _cmd, action);
-    ZHFixAction(action);
-}
-
-// 0.4.14：注册器翻译（仅 SpringBoard）。orig 后改写动作对象的显示字段——不拦调用流，无递归面
-static NSMutableSet *g_regSeen = nil;
-static void ZHFixAction(id action) {
-    @try {
-        if (![action isKindOfClass:objc_getClass("PCAction")]) return;
-        NSString *ident = nil;
-        id iv = [action valueForKey:@"identifier"];
-        if ([iv isKindOfClass:[NSString class]]) ident = iv;
-        if (!ident) return;
-        NSString *shortIdent = [ident hasPrefix:@"com.anthopak.powercuts.action."]
-            ? [ident substringFromIndex:@"com.anthopak.powercuts.action.".length] : ident;
-        NSDictionary *tr = g_tr[shortIdent];
-        if (!tr) return;
-        NSString *nm = tr[@"n"];
-        if (nm) [action setValue:nm forKey:@"name"];
-        NSString *ds = tr[@"d"];
-        if (ds) [action setValue:ds forKey:@"descriptionSummary"];
-        NSString *sm = tr[@"s"];
-        if (sm && [sm length]) [action setValue:sm forKey:@"parameterSummary"];
-        if (!g_regSeen) g_regSeen = [NSMutableSet new];
-        [g_regSeen addObject:ident];
-    } @catch (id e) {}
-}
-#pragma mark - 替换实现
-
-static NSString *ZH_name_imp(id self, SEL _cmd, NSString *ident) {
-    NSDictionary *tr = g_tr[ident];
-    if (tr[@"n"]) return tr[@"n"];
-    IMP o = ZHOrig(self, @"name");
-    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : ident;
-}
-
-static NSString *ZH_desc_imp(id self, SEL _cmd, NSString *ident) {
-    NSDictionary *tr = g_tr[ident];
-    if (tr[@"d"]) return tr[@"d"];
-    IMP o = ZHOrig(self, @"desc");
-    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : @"";
-}
-
-static NSString *ZH_summary_imp(id self, SEL _cmd, NSString *ident) {
-    NSDictionary *tr = g_tr[ident];
-    if (tr[@"s"] && [(NSString *)tr[@"s"] length]) return tr[@"s"];
-    IMP o = ZHOrig(self, @"summary");
-    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : @"";
-}
-
-static NSArray *ZH_params_imp(id self, SEL _cmd, NSString *ident) {
-    IMP o = ZHOrig(self, @"params");
-    NSArray *arr = o ? ((NSArray *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : nil;
-    if (!arr.count) return arr;
-    NSMutableArray *out = [NSMutableArray array];
-    for (NSDictionary *p in arr) {
-        NSMutableDictionary *q = [p mutableCopy];
-        id lab = q[@"Label"];   if (lab) q[@"Label"] = g_lab[lab] ?: lab;
-        id ph  = q[@"Placeholder"]; if (ph) q[@"Placeholder"] = g_lab[ph] ?: ph;
-        [out addObject:q];
-    }
-    return out;
-}
-
-#pragma mark - 安装
-
-
-
 static NSDictionary *PCZHL10N(NSDictionary *orig) {
     if (!orig || !orig.count) return orig;
     NSMutableDictionary *out = [orig mutableCopy];
@@ -234,61 +112,44 @@ static NSDictionary *PCZHL10N(NSDictionary *orig) {
     }
     return out;
 }
-
-
-static IMP origStore = NULL;
-static void ZH_store_imp(id self, SEL _cmd, NSDictionary *actionsData, BOOL writeToCache) {
-    NSDictionary *translated = PCZHL10N(actionsData);
-    if (origStore) ((void(*)(id,SEL,id,BOOL))origStore)(self, _cmd, translated, writeToCache);
-}
-
-static NSDictionary *ZH_cachedData_imp(id self, SEL _cmd) {
-    NSDictionary *orig = ((NSDictionary*(*)(id,SEL))objc_msgSend)(self, _cmd);
-    return PCZHL10N(orig);
-}
-
-static void ZHHookClass(Class cls) {
-    NSString *cn = NSStringFromClass(cls);
-    if (g_origs[[NSString stringWithFormat:@"%@|%@", cn, @"name"]] != nil) return;
-#define HOOK(selName, kind, imp) do { \
-    SEL s = sel_registerName(selName); \
-    Method m = class_getInstanceMethod(cls, s); \
-    if (m && class_addMethod(cls, s, (IMP)imp, method_getTypeEncoding(m)) == NO) { \
-        g_origs[[NSString stringWithFormat:@"%@|%@", cn, kind]] = [NSValue valueWithPointer:(void *)method_getImplementation(m)]; \
-        method_setImplementation(m, (IMP)imp); \
-    } else if (m) { \
-        g_origs[[NSString stringWithFormat:@"%@|%@", cn, kind]] = NULL; \
-    } \
-} while(0)
-    HOOK("nameForIdentifier:", @"name", ZH_name_imp);
-    HOOK("descriptionSummaryForIdentifier:", @"desc", ZH_desc_imp);
-    HOOK("parameterSummaryForIdentifier:", @"summary", ZH_summary_imp);
-    HOOK("parametersDefinitionForIdentifier:", @"params", ZH_params_imp);
-#undef HOOK
-#define CHOOK(selName, kind, imp) do { \
-    SEL s = sel_registerName(selName); \
-    Class meta = object_getClass(cls); \
-    Method m = class_getInstanceMethod(meta, s); \
-    if (m && class_addMethod(meta, s, (IMP)imp, method_getTypeEncoding(m)) == NO) { \
-        g_origs[[NSString stringWithFormat:@"M_%@|%@", cn, kind]] = [NSValue valueWithPointer:(void *)method_getImplementation(m)]; \
-        method_setImplementation(m, (IMP)imp); \
-    } else if (m) { \
-        g_origs[[NSString stringWithFormat:@"M_%@|%@", cn, kind]] = NULL; \
-    } \
-} while(0)
-#undef CHOOK /* 0.4.8 摘除：类方法 hook 无命中且在早期初始化路径引发无限递归（0.4.7 崩溃实证）*/
-}
-
-static void PCZHDelayedInit(void);
-
-%ctor {
-    @autoreleasepool {
-    PCZHDelayedInit();
-    }
-}
+#pragma mark - 显示链咽喉（0.4.21：仅 Shortcuts 进程）
 
 static IMP g_origGet = NULL;
+static IMP g_origCreate = NULL, g_origCreateMulti = NULL, g_origAdd = NULL, g_origSet = NULL;
+static NSMutableSet *g_createSeen = nil;
 
+static void ZHLogAction(id act, NSString *ident, NSString *via) {
+    if (!g_createSeen) g_createSeen = [NSMutableSet new];
+    NSString *key = [NSString stringWithFormat:@"%@|%@", via, ident];
+    if ([g_createSeen containsObject:key]) return;
+    [g_createSeen addObject:key];
+    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh51_create.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+    NSMutableString *props = [NSMutableString string];
+    unsigned int pc = 0;
+    objc_property_t *pl = class_copyPropertyList([act class], &pc);
+    for (unsigned int i2 = 0; i2 < pc && i2 < 30; i2++) [props appendFormat:@"%s ", property_getName(pl[i2])];
+    free(pl);
+    [lg appendFormat:@"%@ | %@ | %@ | props: %@\n", via, ident, NSStringFromClass([act class]), props];
+    [lg writeToFile:@"/var/mobile/Documents/pczh51_create.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+static void ZHTranslateActionObj(id act, NSString *via) {
+    @try {
+        NSString *ident = [act valueForKey:@"identifier"];
+        if (![ident isKindOfClass:[NSString class]]) return;
+        if (![ident hasPrefix:@"com.anthopak.powercuts.action."]) return;
+        NSString *si = [ident substringFromIndex:30];
+        NSDictionary *tr = g_tr[si];
+        if (tr && act) {
+            if (tr[@"n"]) [act setValue:tr[@"n"] forKey:@"name"];
+            if (tr[@"d"]) [act setValue:tr[@"d"] forKey:@"descriptionSummary"];
+            if (tr[@"s"] && [(NSString *)tr[@"s"] length]) [act setValue:tr[@"s"] forKey:@"parameterSummary"];
+        }
+        ZHLogAction(act, ident, via);
+    } @catch (id e) {}
+}
+
+// PCM getter：返回翻译副本
 static id ZH_cacheGet_imp(id self, SEL _cmd) {
     @try {
         id v = ((id(*)(id, SEL))g_origGet)(self, _cmd);
@@ -298,8 +159,8 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
             for (id item in v) {
                 if ([item isKindOfClass:[NSDictionary class]]) {
                     NSString *ident = item[@"identifier"];
-                    NSString *si = [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
-                    NSDictionary *tr = g_tr[si];
+                    NSString *si = [ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
+                    NSDictionary *tr = si ? g_tr[si] : nil;
                     if (tr) {
                         NSMutableDictionary *q = [item mutableCopy];
                         if (tr[@"n"]) q[@"name"] = tr[@"n"];
@@ -309,7 +170,7 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
                         continue;
                     }
                 } else if ([item isKindOfClass:objc_getClass("PCAction")]) {
-                    ZHFixAction(item);
+                    ZHTranslateActionObj(item, @"getter");
                     [out addObject:item];
                     continue;
                 }
@@ -321,138 +182,85 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
     } @catch (id e) { return ((id(*)(id, SEL))g_origGet)(self, _cmd); }
 }
 
-
-static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hits) {
-    if (depth > 4 || *hits > 50) return 0;
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil];
-    if (!items) return 0;
-    int scanned = 0;
-    for (NSString *f in items) {
-        if (scanned > 500) break;
-        NSString *p = [dir stringByAppendingPathComponent:f];
-        NSDictionary *st = [fm attributesOfItemAtPath:p error:nil];
-        if (!st) continue;
-        if ([st.fileType isEqualToString:NSFileTypeDirectory]) {
-            scanned += ZHScanDir(report, p, depth + 1, hits);
-        } else {
-            unsigned long long sz = [st fileSize];
-            if (sz == 0 || sz > 5 * 1024 * 1024) continue;
-            if ([f containsString:@"Caches"] || [f containsString:@"SplashBoard"]) continue;
-            NSData *d = [NSData dataWithContentsOfFile:p];
-            if (!d) continue;
-            scanned++;
-            if (d.length > 100 && memmem(d.bytes, d.length, "com.anthopak.powercuts.action", 29)) {
-                (*hits)++;
-                [report appendFormat:@"HIT: %@ (%llu KB)\n", p, sz / 1024];
-            }
-        }
-    }
-    return scanned;
-}
-
-static IMP g_origCreate = NULL;
-static NSMutableSet *g_createSeen = nil;
 static id ZH_create_imp(id self, SEL _cmd, NSString *ident, id params) {
     id act = ((id(*)(id, SEL, id, id))g_origCreate)(self, _cmd, ident, params);
+    if (act) ZHTranslateActionObj(act, @"create1");
+    return act;
+}
+static id ZH_createmulti_imp(id self, SEL _cmd, NSArray *idents, NSArray *params) {
+    id out = ((id(*)(id, SEL, id, id))g_origCreateMulti)(self, _cmd, idents, params);
     @try {
-        if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
-            NSString *si = [ident substringFromIndex:30];
-            NSDictionary *tr = g_tr[si];
-            if (tr && act) {
-                NSMutableString *applied = [NSMutableString string];
-                if (tr[@"n"]) { [act setValue:tr[@"n"] forKey:@"name"]; [applied appendString:@"name "]; }
-                if (tr[@"d"]) { [act setValue:tr[@"d"] forKey:@"descriptionSummary"]; [applied appendString:@"desc "]; }
-                if (tr[@"s"] && [(NSString *)tr[@"s"] length]) { [act setValue:tr[@"s"] forKey:@"parameterSummary"]; [applied appendString:@"summary "]; }
-                if (!g_createSeen) g_createSeen = [NSMutableSet new];
-                if (![g_createSeen containsObject:ident]) {
-                    [g_createSeen addObject:ident];
-                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh50_create.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                    [lg appendFormat:@"%@ | %@ | %@\n", ident, NSStringFromClass([act class]), applied];
-                    [lg writeToFile:@"/var/mobile/Documents/pczh50_create.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                }
-            }
+        if ([out isKindOfClass:[NSArray class]]) for (id act in out) {
+            if ([act isKindOfClass:[NSArray class]]) { for (id a in act) ZHTranslateActionObj(a, @"createN"); }
+            else ZHTranslateActionObj(act, @"createN");
         }
     } @catch (id e) {}
-    return act;
+    return out;
+}
+static void ZH_add_imp(id self, SEL _cmd, NSArray *actions, id provider) {
+    ((void(*)(id, SEL, id, id))g_origAdd)(self, _cmd, actions, provider);
+    @try {
+        for (id act in actions) {
+            if ([act isKindOfClass:[NSArray class]]) { for (id a in act) ZHTranslateActionObj(a, @"add"); }
+            else ZHTranslateActionObj(act, @"add");
+        }
+    } @catch (id e) {}
+}
+static void ZH_set_imp(id self, SEL _cmd, NSArray *actions, id provider) {
+    ((void(*)(id, SEL, id, id))g_origSet)(self, _cmd, actions, provider);
+    @try {
+        for (id act in actions) {
+            if ([act isKindOfClass:[NSArray class]]) { for (id a in act) ZHTranslateActionObj(a, @"set"); }
+            else ZHTranslateActionObj(act, @"set");
+        }
+    } @catch (id e) {}
 }
 
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             NSMutableString *report = [NSMutableString string];
-            [report appendFormat:@"proc=%@\n", [NSProcessInfo processInfo].processName];
-            Class pcm = objc_getClass("PCSharedBucketManager");
-            if (pcm) {
-                Method gm = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
-                if (gm && !g_origGet) {
-                    g_origGet = method_getImplementation(gm);
-                    method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
-                    [report appendString:@"getter hooked\n"];
-                } else if (!gm) [report appendString:@"getter NOT found\n"];
-            } else [report appendString:@"PCM nil\n"];
-            // 0.4.20：WFActionRegistry create 咽喉 hook
-            Class wfr = objc_getClass("WFActionRegistry");
-            if (wfr) {
-                SEL cs = sel_registerName("createActionWithIdentifier:serializedParameters:");
-                Method cm = class_getInstanceMethod(wfr, cs);
-                if (cm && !g_origCreate) {
-                    g_origCreate = method_getImplementation(cm);
-                    method_setImplementation(cm, (IMP)ZH_create_imp);
-                    [report appendString:@"create hooked\n"];
-                } else if (!cm) [report appendString:@"create NOT found\n"];
-            } else [report appendString:@"WFActionRegistry nil\n"];
-            // 0.4.19：门控扫描——只读 metadata 识别容器身份，命中目标才扫；后台线程；开关文件可跳过
-            int hits = 0;
-            if (YES) { // 0.4.20 起扫描默认关
-        // if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/mobile/Documents/pczh_skip_scan"]) {
-                [report appendString:@"scan skipped by switch\n"];
-            } else {
-                [report appendString:@"== scan begin (gated) ==\n"];
-                NSFileManager *fm = [NSFileManager defaultManager];
-                NSString *containers = @"/var/mobile/Containers/Data/Application";
-                for (NSString *uuid in [fm contentsOfDirectoryAtPath:containers error:nil]) {
-                    if (hits > 20) break;
-                    NSString *cpath = [containers stringByAppendingPathComponent:uuid];
-                    NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
-                    NSString *bid = meta[@"MCMMetadataIdentifier"];
-                    if (![bid containsString:@"shortcuts"] && ![bid containsString:@"siriactionsd"] && ![bid containsString:@"WorkflowKit"]) continue;
-                    [report appendFormat:@"SCAN-C: %@ (%@)\n", uuid, bid];
-                    hits += ZHScanDir(report, cpath, 2, &hits);
-                }
-                NSString *sg = @"/var/mobile/Containers/Shared/AppGroup";
-                for (NSString *uuid in [fm contentsOfDirectoryAtPath:sg error:nil]) {
-                    if (hits > 30) break;
-                    NSString *cpath = [sg stringByAppendingPathComponent:uuid];
-                    NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
-                    NSString *bid = meta[@"MCMMetadataIdentifier"] ?: @"";
-                    if (![bid containsString:@"shortcuts"] && ![bid containsString:@"siriactionsd"] && ![bid containsString:@"WorkflowKit"]) continue;
-                    [report appendFormat:@"SCAN-G: %@ (%@)\n", uuid, bid];
-                    hits += ZHScanDir(report, cpath, 2, &hits);
-                }
-            }
-            [report appendFormat:@"== scan done hits=%d ==\n", hits];
-            // WFActionRegistry* 类自省（显示层规划）
-            int num2 = objc_getClassList(NULL, 0);
-            if (num2 > 0) {
-                Class *cls = (__unsafe_unretained Class *)malloc(sizeof(Class) * num2);
-                objc_getClassList(cls, num2);
-                for (int i = 0; i < num2; i++) {
-                    const char *nm = class_getName(cls[i]);
-                    if (strncmp(nm, "WFActionRegistry", 16) == 0) {
-                        [report appendFormat:@"== %@ ==\n", [NSString stringWithUTF8String:nm]];
-                        unsigned int mc = 0;
-                        Method *ms = class_copyMethodList(object_getClass(cls[i]), &mc);
-                        for (unsigned int j = 0; j < mc && j < 40; j++) [report appendFormat:@"+ %s\n", sel_getName(method_getName(ms[j]))];
-                        free(ms);
-                        ms = class_copyMethodList(cls[i], &mc);
-                        for (unsigned int j = 0; j < mc && j < 60; j++) [report appendFormat:@"- %s\n", sel_getName(method_getName(ms[j]))];
-                        free(ms);
+            NSString *procName = [NSProcessInfo processInfo].processName;
+            [report appendFormat:@"proc=%@\n", procName];
+            if ([procName isEqualToString:@"Shortcuts"]) {
+                Class pcm = objc_getClass("PCSharedBucketManager");
+                if (pcm) {
+                    Method gm = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
+                    if (gm && !g_origGet) {
+                        g_origGet = method_getImplementation(gm);
+                        method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
+                        [report appendString:@"getter hooked\n"];
+                    } else if (!gm) [report appendString:@"getter NOT found\n"];
+                } else [report appendString:@"PCM nil\n"];
+                Class wfr = objc_getClass("WFActionRegistry");
+                if (wfr) {
+                    struct { SEL s; IMP *orig; IMP rep; const char *tag; } hooks[] = {
+                        { sel_registerName("createActionWithIdentifier:serializedParameters:"), &g_origCreate, (IMP)ZH_create_imp, "create1" },
+                        { sel_registerName("createActionsWithIdentifiers:serializedParameterArray:"), &g_origCreateMulti, (IMP)ZH_createmulti_imp, "createN" },
+                        { sel_registerName("addActions:fromActionProvider:"), &g_origAdd, (IMP)ZH_add_imp, "add" },
+                        { sel_registerName("setActions:forProvider:"), &g_origSet, (IMP)ZH_set_imp, "set" },
+                    };
+                    for (int hi = 0; hi < 4; hi++) {
+                        Method cm = class_getInstanceMethod(wfr, hooks[hi].s);
+                        if (cm && !*hooks[hi].orig) {
+                            *hooks[hi].orig = method_getImplementation(cm);
+                            method_setImplementation(cm, hooks[hi].rep);
+                            [report appendFormat:@"%s hooked\n", hooks[hi].tag];
+                        } else if (!cm) [report appendFormat:@"%s NOT found\n", hooks[hi].tag];
                     }
-                }
-                free(cls);
+                } else [report appendString:@"WFActionRegistry nil\n"];
+            } else {
+                [report appendString:@"registry hooks skipped (not Shortcuts)\n"];
             }
-            [report appendString:@"mode=fsprobe v0.4.20\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh50_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report appendString:@"mode=choke v0.4.21\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh51_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
+}
+
+static void PCZHDelayedInit(void);
+
+%ctor {
+    @autoreleasepool {
+        PCZHDelayedInit();
+    }
 }
