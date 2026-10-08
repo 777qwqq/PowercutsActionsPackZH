@@ -485,16 +485,19 @@ static void PCZHDelayedInit(void) {
 }
 
 %ctor {
-    @autoreleasepool {
-        // 1.1.0：加载标记（ctor 第一件事，区分"没注入"与"代码没跑"）
-        @try {
-            NSMutableString *mk = [NSMutableString string];
-            [mk appendFormat:@"loaded proc=%@\n", [NSProcessInfo processInfo].processName];
-            NSURL *g = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.is.workflow.shortcuts"];
-            if (g) [mk writeToFile:[g.path stringByAppendingPathComponent:@"pczh67_marker.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            [mk writeToFile:@"/var/jb/var/mobile/pczh67_marker.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            [mk writeToFile:@"/var/mobile/Documents/pczh67_marker.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        } @catch (id e) {}
-        PCZHDelayedInit();
-    }
+    // 1.1.4：dyld 初始化阶段绝对零工作（Foundation 此时尚未加载，任何 ObjC 调用都可能崩）
+    // 全部逻辑延迟 0.5 秒后台执行
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_global_queue(0, 0), ^{
+        @autoreleasepool {
+            @try {
+                NSMutableString *mk = [NSMutableString string];
+                [mk appendFormat:@"loaded proc=%@\n", [NSProcessInfo processInfo].processName];
+                NSURL *g = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.is.workflow.shortcuts"];
+                if (g) [mk writeToFile:[g.path stringByAppendingPathComponent:@"pczh67_marker.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                [mk writeToFile:@"/var/jb/var/mobile/pczh67_marker.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                [mk writeToFile:@"/var/mobile/Documents/pczh67_marker.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            } @catch (id e) {}
+            PCZHDelayedInit();
+        }
+    });
 }
