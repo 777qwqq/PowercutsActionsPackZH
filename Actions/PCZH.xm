@@ -173,11 +173,15 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
         NSDictionary *orig = ((NSDictionary *(*)(id, SEL))g_origPPD)(self, _cmd);
         {
             static int pd = 0;
-            if (pd < 5) {
+            if (pd < 3) {
                 pd++;
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdall.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendFormat:@"class=%@ ident=%@ keys=%@\n", NSStringFromClass([self class]), ({ id iv=nil; @try { iv=[self valueForKey:@"identifier"]; } @catch(id e){} iv; }), orig.allKeys];
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdall.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_ppd.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                [lg appendFormat:@"=== ident=%@\n", ({ id iv=nil; @try { iv=[self valueForKey:@"identifier"]; } @catch(id e){} iv; })];
+                for (NSString *k in orig) {
+                    id v = orig[k];
+                    [lg appendFormat:@"  %@ = %@\n", k, [v isKindOfClass:[NSString class]] ? ([v length] > 80 ? [NSString stringWithFormat:@"%@...", [v substringToIndex:80]] : v) : [NSString stringWithFormat:@"<%@ len=%lu>", NSStringFromClass([v class]), (unsigned long)([v isKindOfClass:[NSArray class]] || [v isKindOfClass:[NSDictionary class]] ? [v count] : 0)]];
+                }
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_ppd.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
         }
         if (!g_ppdCache) g_ppdCache = [NSMapTable weakToStrongObjectsMapTable];
@@ -190,9 +194,9 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
         NSDictionary *tr = ZHTr(ident);
         if (!tr) return orig;
         NSMutableDictionary *out = [orig mutableCopy];
-        if (tr[@"n"]) out[@"name"] = tr[@"n"];
+        if (tr[@"n"]) { out[@"name"] = tr[@"n"]; if ([out[@"summary"] isKindOfClass:[NSString class]]) out[@"summary"] = tr[@"n"]; }
         if (tr[@"d"]) out[@"descriptionSummary"] = tr[@"d"];
-        if (tr[@"s"] && [(NSString *)tr[@"s"] length]) out[@"parameterSummary"] = tr[@"s"];
+        if (tr[@"s"] && [(NSString *)tr[@"s"] length]) { out[@"parameterSummary"] = tr[@"s"]; if ([out[@"canvasSummary"] isKindOfClass:[NSString class]]) out[@"canvasSummary"] = tr[@"s"]; }
         id params = out[@"parameters"];
         if ([params isKindOfClass:[NSArray class]]) {
             NSMutableArray *np = [NSMutableArray array];
