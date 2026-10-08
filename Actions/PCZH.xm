@@ -11,6 +11,55 @@
 
 static NSDictionary *g_tr;   // identifier → {name, desc, summary}
 static NSDictionary *g_lab;  // 参数 Label/Placeholder 英文 → 中文
+static NSDictionary *g_setMap = nil;
+static void PCZHInitSettingsMap(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        g_setMap = @{
+            @"HOW IT WORKS": @"工作原理",
+            @"USEFUL ADDITIONS": @"实用增强",
+            @"Disable Automation notifications": @"禁用自动化通知",
+            @"Automations without confirmation": @"自动化无需确认",
+            @"Allow import/export Shortcuts as files": @"允许以文件方式导入/导出快捷指令",
+            @"Allow running sensitive actions unauthenticated": @"敏感动作无需解锁验证",
+            @"Allow running sensistive actions unauthenticated": @"敏感动作无需解锁验证",
+            @"Hide top progress banner": @"隐藏顶部进度横幅",
+            @"Respring": @"注销",
+            @"Enabled (respring required)": @"启用（需注销）",
+        };
+    });
+}
+static NSString *ZHMap(NSString *s) {
+    if (![s isKindOfClass:[NSString class]]) return nil;
+    NSString *m = g_setMap[s];
+    if (m) return m;
+    if ([s length] > 40) {
+        if ([s hasPrefix:@"- Disable Automation notifications:"])
+            return @"- 关闭自动化通知：自动化运行时不再弹通知\n- 自动化无需确认：所有触发器（邮件和信息除外）运行自动化时无需手动确认\n- 允许以文件方式导入/导出快捷指令：改为导入/导出 .shortcuts 或 .wflow 文件而非 iCloud 链接\n- 敏感动作无需解锁验证：部分动作不再要求解锁手机（在锁屏自动化的场景有用，并非对所有敏感动作生效）\n- 隐藏顶部进度横幅：从主屏幕图标、辅助触控等运行快捷指令时，不再显示顶部进度横幅";
+        if ([s hasPrefix:@"Powercuts is a library"])
+            return @"Powercuts 是一个为 iOS「快捷指令」提供的动作库，让你能在快捷指令和个人自动化中使用新的动作。安装后请在包管理器里搜索 \"Powercuts\" 安装动作包，之后在快捷指令编辑器的「App > Powercuts」中就能找到这些动作。";
+    }
+    return nil;
+}
+static IMP g_origSpecName = NULL, g_origSpecProp = NULL;
+static NSString *ZH_specname_imp(id self, SEL _cmd) {
+    @try {
+        NSString *o = ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd);
+        NSString *m = ZHMap(o);
+        return m ?: o;
+    } @catch (id e) { return ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd); }
+}
+static id ZH_specprop_imp(id self, SEL _cmd, NSString *key) {
+    @try {
+        id v = ((id(*)(id, SEL, id))g_origSpecProp)(self, _cmd, key);
+        if ([v isKindOfClass:[NSString class]]) {
+            NSString *m = ZHMap(v);
+            if (m) return m;
+        }
+        return v;
+    } @catch (id e) { return ((id(*)(id, SEL, id))g_origSpecProp)(self, _cmd, key); }
+}
+
 static NSDictionary *ZHTr(NSString *ident) {
     if (![ident isKindOfClass:[NSString class]]) return nil;
     NSDictionary *t = g_tr[ident];
@@ -146,13 +195,6 @@ static NSString *ZH_tplname_imp(id self, SEL _cmd) {
             NSString *si = [ident substringFromIndex:30];
             NSDictionary *tr = ZHTr(ident);
             if (tr && tr[@"n"]) {
-                static int tl = 0;
-                if (tl < 10) {
-                    tl++;
-                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh60_tplhits.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                    [lg appendFormat:@"%@ | %@\n", NSStringFromClass([self class]), tr[@"n"]];
-                    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh60_tplhits.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                }
                 return tr[@"n"];
             }
         }
@@ -171,19 +213,7 @@ static NSMapTable *g_ppdCache = nil;
 static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
     @try {
         NSDictionary *orig = ((NSDictionary *(*)(id, SEL))g_origPPD)(self, _cmd);
-        {
-            static int pd = 0;
-            if (pd < 3) {
-                pd++;
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_ppd.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendFormat:@"=== ident=%@\n", ({ id iv=nil; @try { iv=[self valueForKey:@"identifier"]; } @catch(id e){} iv; })];
-                for (NSString *k in orig) {
-                    id v = orig[k];
-                    [lg appendFormat:@"  %@ = %@\n", k, [v isKindOfClass:[NSString class]] ? ([v length] > 80 ? [NSString stringWithFormat:@"%@...", [v substringToIndex:80]] : v) : [NSString stringWithFormat:@"<%@ len=%lu>", NSStringFromClass([v class]), (unsigned long)([v isKindOfClass:[NSArray class]] || [v isKindOfClass:[NSDictionary class]] ? [v count] : 0)]];
-                }
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_ppd.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            }
-        }
+
         if (!g_ppdCache) g_ppdCache = [NSMapTable weakToStrongObjectsMapTable];
         NSDictionary *cached = [g_ppdCache objectForKey:self];
         if (cached) return cached;
@@ -208,13 +238,7 @@ static NSDictionary *ZH_ppd_imp(id self, SEL _cmd) {
             }
             out[@"parameters"] = np;
         }
-        static int pl = 0;
-        if (pl < 5) {
-            pl++;
-            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdhit.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-            [lg appendFormat:@"%@ | keys=%@\n", ident, orig.allKeys];
-            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_ppdhit.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        }
+
         [g_ppdCache setObject:out forKey:self];
         return out;
     } @catch (id e) {
@@ -258,11 +282,7 @@ static IMP g_origWCName = NULL;
 static int g_wcNameCalls = 0;
 static NSString *ZH_wcname_imp(id self, SEL _cmd) {
     g_wcNameCalls++;
-    if (g_wcNameCalls <= 10) {
-        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-        [lg appendFormat:@"#%d class=%@\n", g_wcNameCalls, NSStringFromClass([self class])];
-        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh62_who.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    }
+
     @try {
         NSString *ident = [self valueForKey:@"identifier"];
         if ([ident isKindOfClass:[NSString class]] && [ident hasPrefix:@"com.anthopak.powercuts.action."]) {
@@ -284,9 +304,12 @@ static void ZHTranslateActionObj(id act, NSString *via) {
         NSString *ident = [act valueForKey:@"identifier"];
         if (![ident isKindOfClass:[NSString class]]) return;
         if (![ident hasPrefix:@"com.anthopak.powercuts.action."]) return;
-        // 0.4.33：观察日志已移除
-        if (!g_createSeen) g_createSeen = [NSMutableSet new];
-
+        NSDictionary *tr = ZHTr(ident);
+        if (tr && act) {
+            if (tr[@"n"]) [act setValue:tr[@"n"] forKey:@"name"];
+            if (tr[@"d"]) [act setValue:tr[@"d"] forKey:@"descriptionSummary"];
+            if (tr[@"s"] && [(NSString *)tr[@"s"] length]) [act setValue:tr[@"s"] forKey:@"parameterSummary"];
+        }
     } @catch (id e) {}
 }
 
@@ -428,199 +451,112 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
     return ((NSString *(*)(id, SEL))g_origSumLocTitle)(self, _cmd);
 }
 
+// ===== 1.0.0 正式版 =====
+// SpringBoard：延迟异步（文件翻译，防 dyld 早期初始化时序问题）
+// Shortcuts：name/descriptionSummary/description/PPD 四 getter（显示链）
+// Preferences：PSSpecifier 精确映射（设置页）
+static void PCZHDelayedInit(void);
+static void PCZHSBDeferredInit(void);
+
 static void PCZHDelayedInit(void) {
-        NSMutableString *report = [NSMutableString string];
+        PCZHInitTables();
         NSString *procName = [NSProcessInfo processInfo].processName;
-        @try {
-            PCZHInitTables();
-            [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        } @catch (id e) { return; }
-        if (![procName isEqualToString:@"Shortcuts"]) {
-            [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            return;
-        }
-        @try {
-            NSFileManager *fm = [NSFileManager defaultManager];
-            int hits = 0;
-            for (NSString *root in @[@"/var/mobile/Containers/Data/Application", @"/var/mobile/Containers/Shared/AppGroup"]) {
-                for (NSString *uuid in [fm contentsOfDirectoryAtPath:root error:nil]) {
-                    if (hits > 15) break;
-                    NSString *cpath = [root stringByAppendingPathComponent:uuid];
-                    NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
-                    NSString *bid = [meta[@"MCMMetadataIdentifier"] isKindOfClass:[NSString class]] ? meta[@"MCMMetadataIdentifier"] : @"";
-                    if (![bid containsString:@"shortcut"] && ![bid containsString:@"workflow"]) continue;
-                    [report appendFormat:@"C: %@\n", cpath];
-                    ZHScanDir(report, cpath, 2, &hits);
-                }
-            }
-            [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        } @catch (id e) {
-            [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        }
-        @try {
-            Class wfr = objc_getClass("WFActionRegistry");
-            if (wfr) {
-                int n = 4;
-                SEL sl[4]; IMP *og[4]; IMP rp[4]; const char *tg[4];
-                sl[0] = sel_registerName("createActionWithIdentifier:serializedParameters:");            og[0] = &g_origCreate;      rp[0] = (IMP)ZH_create_imp;      tg[0] = "create1";
-                sl[1] = sel_registerName("createActionsWithIdentifiers:serializedParameterArray:");      og[1] = &g_origCreateMulti; rp[1] = (IMP)ZH_createmulti_imp; tg[1] = "createN";
-                sl[2] = sel_registerName("addActions:fromActionProvider:");                              og[2] = &g_origAdd;         rp[2] = (IMP)ZH_add_imp;         tg[2] = "add";
-                sl[3] = sel_registerName("setActions:forProvider:");                                     og[3] = &g_origSet;         rp[3] = (IMP)ZH_set_imp;         tg[3] = "set";
-                // 0.4.28：registry 查询打点（渲染源）
-                SEL acs = sel_registerName("actionsForCategory:");
-                Method acm = class_getInstanceMethod(wfr, acs);
-                if (acm && !g_origForCat) {
-                    g_origForCat = method_getImplementation(acm);
-                    method_setImplementation(acm, (IMP)ZH_forcat_imp);
-                    [report appendString:@"forCat hooked\n"];
-                }
-                SEL asel = sel_registerName("actions");
-                Method am = class_getInstanceMethod(wfr, asel);
-                if (am && !g_origActions) {
-                    g_origActions = method_getImplementation(am);
-                    method_setImplementation(am, (IMP)ZH_actions_imp);
-                    [report appendString:@"actions hooked\n"];
-                }
-                // 0.4.29：模板库 name hook
-                {
-                    const char *tplClasses[2] = {"WFActionTemplateMetadata", "WFActionTemplate"};
-                    for (int ti = 0; ti < 2; ti++) {
-                        Class tc = objc_getClass(tplClasses[ti]);
-                        if (!tc) { [report appendFormat:@"%s nil\n", tplClasses[ti]]; continue; }
-                        Method nm = class_getInstanceMethod(tc, sel_registerName("name"));
-                        if (nm && !g_origTplName[ti]) {
-                            g_origTplName[ti] = method_getImplementation(nm);
-                            method_setImplementation(nm, (IMP)ZH_tplname_imp);
-                            [report appendFormat:@"%s-name hooked\n", tplClasses[ti]];
-                        } else if (!nm) [report appendFormat:@"%s-name NOT found\n", tplClasses[ti]];
-                    }
-                }
-                // 0.4.31：类面扫描——WFAction* 类的 name/title 方法 + PC* 类全量方法
-                @try {
-                    int num3 = objc_getClassList(NULL, 0);
-                    if (num3 > 0) {
-                        Class *cls3 = (__unsafe_unretained Class *)malloc(sizeof(Class) * num3);
-                        objc_getClassList(cls3, num3);
-                        for (int ci = 0; ci < num3; ci++) {
-                            const char *cn3 = class_getName(cls3[ci]);
-                            BOOL isWF = strncmp(cn3, "WFAction", 8) == 0;
-                            BOOL isPC = strncmp(cn3, "PC", 2) == 0;
-                            if (!isWF && !isPC) continue;
-                            if (isPC && strcmp(cn3, "PCAction") == 0) {} // PCAction 也要
-                            NSMutableString *line = [NSMutableString string];
-                            unsigned int mc3 = 0;
-                            Method *ms3 = class_copyMethodList(cls3[ci], &mc3);
-                            for (unsigned int mi = 0; mi < mc3; mi++) {
-                                const char *sn = sel_getName(method_getName(ms3[mi]));
-                                if (isPC || strstr(sn, "name") || strstr(sn, "Name") || strstr(sn, "title") || strstr(sn, "Title") || strstr(sn, "label") || strstr(sn, "descri")) {
-                                    [line appendFormat:@"%s ", sn];
-                                }
-                            }
-                            free(ms3);
-                            if (line.length) [report appendFormat:@"%@ [%s]: %@\n", [NSString stringWithUTF8String:cn3], isPC ? "PC" : "WF", line];
-                        }
-                        free(cls3);
-                    }
-                } @catch (id e) {}
-                // 0.4.29：Library 子目录全扫（找模板库持久化文件）
-                @try {
-                    int hits2 = 0;
-                    NSFileManager *fm2 = [NSFileManager defaultManager];
-                    for (NSString *d in [fm2 contentsOfDirectoryAtPath:@"/var/mobile/Library" error:nil]) {
-                        if (hits2 > 10) break;
-                        NSString *p = [@"/var/mobile/Library" stringByAppendingPathComponent:d];
-                        BOOL isDir = NO;
-                        [fm2 fileExistsAtPath:p isDirectory:&isDir];
-                        if (!isDir) continue;
-                        if ([d containsString:@"Caches"] || [d containsString:@"Media"] || [d containsString:@"SplashBoard"]) continue;
-                        ZHScanDir(report, p, 1, &hits2);
-                    }
-                    [report appendFormat:@"lib-scan hits=%d\n", hits2];
-                } @catch (id e) {}
-                // 0.4.30：processedParametersDic hook（渲染源终结点）
-                Class wcc2 = nil;
-                if (wcc2 = objc_getClass("WFCustomAction")) {
-                    Method pm = class_getInstanceMethod(wcc2, sel_registerName("processedParametersDic"));
-                    if (pm && !g_origPPD) {
-                        g_origPPD = method_getImplementation(pm);
-                        method_setImplementation(pm, (IMP)ZH_ppd_imp);
-                        [report appendString:@"PPD hooked\n"];
-                    } else if (!pm) [report appendString:@"PPD NOT found\n"];
-                }
-                // WFCustomAction -name（第五打点）+ 全量方法/ivar dump
-                {
-                    // 0.4.35：WFActionParameterSummary title
-                {
-                    Class wps = objc_getClass("WFActionParameterSummary");
-                    if (wps) {
-                        Method im = class_getInstanceMethod(wps, sel_registerName("initWithAction:definition:title:"));
-                        if (im && !g_origSumInit) {
-                            g_origSumInit = method_getImplementation(im);
-                            method_setImplementation(im, (IMP)ZH_suminit_imp);
-                        }
-                        Method tm = class_getInstanceMethod(wps, sel_registerName("title"));
-                        if (tm && !g_origSumTitle) {
-                            g_origSumTitle = method_getImplementation(tm);
-                            method_setImplementation(tm, (IMP)ZH_sumtitle_imp);
-                        }
-                        Method lm = class_getInstanceMethod(wps, sel_registerName("localizedTitle"));
-                        if (lm && !g_origSumLocTitle) {
-                            g_origSumLocTitle = method_getImplementation(lm);
-                            method_setImplementation(lm, (IMP)ZH_sumloctitle_imp);
-                        }
+        if ([procName isEqualToString:@"Shortcuts"]) {
+            @try {
+                Class pcm = objc_getClass("PCSharedBucketManager");
+                if (pcm) {
+                    Method gm = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
+                    if (gm && !g_origGet) {
+                        g_origGet = method_getImplementation(gm);
+                        method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
                     }
                 }
                 Class wcc = objc_getClass("WFCustomAction");
-                    if (wcc) {
-                        { NSMutableString *chain = [NSMutableString string]; Class c = wcc; while (c) { [chain appendFormat:@"%@ <- ", NSStringFromClass(c)]; c = class_getSuperclass(c); } [report appendFormat:@"== WC chain: %@ ==\n", chain]; }
-                        [report appendString:@"== WC methods ==\n"];
-                        unsigned int mc = 0;
-                        Method *ms = class_copyMethodList(wcc, &mc);
-                        for (unsigned int mi = 0; mi < mc; mi++) [report appendFormat:@"%s\n", sel_getName(method_getName(ms[mi]))];
-                        free(ms);
-                        [report appendString:@"== WC ivars ==\n"];
-                        unsigned int ic = 0;
-                        Ivar *iv = class_copyIvarList(wcc, &ic);
-                        for (unsigned int ii = 0; ii < ic; ii++) [report appendFormat:@"%s %s\n", ivar_getTypeEncoding(iv[ii]), ivar_getName(iv[ii])];
-                        free(iv);
-                        Method nm = class_getInstanceMethod(wcc, sel_registerName("name"));
-                        if (nm && !g_origWCName) {
-                            g_origWCName = method_getImplementation(nm);
-                            method_setImplementation(nm, (IMP)ZH_wcname_imp);
-                            [report appendString:@"WC-name hooked\n"];
-                        } else if (!nm) [report appendString:@"WC-name NOT found\n"];
-                        Method dsm = class_getInstanceMethod(wcc, sel_registerName("descriptionSummary"));
-                        if (dsm && !g_origWCDs) {
-                            g_origWCDs = method_getImplementation(dsm);
-                            method_setImplementation(dsm, (IMP)ZH_dsummary_imp);
-                            [report appendString:@"WC-dsummary hooked\n"];
+                if (wcc) {
+                    struct { SEL s; IMP *orig; IMP rep; } hooks[] = {
+                        { sel_registerName("name"), &g_origWCName, (IMP)ZH_wcname_imp },
+                        { sel_registerName("descriptionSummary"), &g_origWCDs, (IMP)ZH_dsummary_imp },
+                        { sel_registerName("description"), &g_origWCDesc, (IMP)ZH_desc_imp },
+                        { sel_registerName("processedParametersDic"), &g_origPPD, (IMP)ZH_ppd_imp },
+                        { sel_registerName("initWithAction:definition:title:"), NULL, NULL },
+                    };
+                    for (int hi = 0; hi < 4; hi++) {
+                        Method cm = class_getInstanceMethod(wcc, hooks[hi].s);
+                        if (cm && !*hooks[hi].orig) {
+                            *hooks[hi].orig = method_getImplementation(cm);
+                            method_setImplementation(cm, hooks[hi].rep);
                         }
-                        Method dcm = class_getInstanceMethod(wcc, sel_registerName("description"));
-                        if (dcm && !g_origWCDesc) {
-                            g_origWCDesc = method_getImplementation(dcm);
-                            method_setImplementation(dcm, (IMP)ZH_desc_imp);
-                            [report appendString:@"WC-desc hooked\n"];
-                        }
-                    } else [report appendString:@"WFCustomAction class nil\n"];
+                    }
                 }
-                for (int hi = 0; hi < n; hi++) {
-                    Method cm = class_getInstanceMethod(wfr, sl[hi]);
-                    if (cm && !*og[hi]) {
-                        *og[hi] = method_getImplementation(cm);
-                        method_setImplementation(cm, rp[hi]);
-                        [report appendFormat:@"%s hooked\n", tg[hi]];
-                    } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
+                Class wps = objc_getClass("WFActionParameterSummary");
+                if (wps) {
+                    Method im = class_getInstanceMethod(wps, sel_registerName("initWithAction:definition:title:"));
+                    if (im && !g_origSumInit) {
+                        g_origSumInit = method_getImplementation(im);
+                        method_setImplementation(im, (IMP)ZH_suminit_imp);
+                    }
+                    Method tm = class_getInstanceMethod(wps, sel_registerName("title"));
+                    if (tm && !g_origSumTitle) {
+                        g_origSumTitle = method_getImplementation(tm);
+                        method_setImplementation(tm, (IMP)ZH_sumtitle_imp);
+                    }
+                    Method lm = class_getInstanceMethod(wps, sel_registerName("localizedTitle"));
+                    if (lm && !g_origSumLocTitle) {
+                        g_origSumLocTitle = method_getImplementation(lm);
+                        method_setImplementation(lm, (IMP)ZH_sumloctitle_imp);
+                    }
                 }
-            } else [report appendString:@"WFActionRegistry nil\n"];
-            [report appendString:@"step=done v0.4.35\n"];
-        } @catch (id e) {
-            [report appendFormat:@"hooks CRASHED: %@\n", e];
+            } @catch (id e) {}
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        else if ([procName isEqualToString:@"Preferences"]) {
+            @try {
+                PCZHInitSettingsMap();
+                Class psc = objc_getClass("PSSpecifier");
+                if (psc) {
+                    Method nm = class_getInstanceMethod(psc, sel_registerName("name"));
+                    if (nm && !g_origSpecName) {
+                        g_origSpecName = method_getImplementation(nm);
+                        method_setImplementation(nm, (IMP)ZH_specname_imp);
+                    }
+                    Method pm = class_getInstanceMethod(psc, sel_registerName("propertyForKey:"));
+                    if (pm && !g_origSpecProp) {
+                        g_origSpecProp = method_getImplementation(pm);
+                        method_setImplementation(pm, (IMP)ZH_specprop_imp);
+                    }
+                }
+            } @catch (id e) {}
+        }
+        else if ([procName isEqualToString:@"SpringBoard"]) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_global_queue(0, 0), ^{
+                PCZHSBDeferredInit();
+            });
+        }
+}
+
+static void PCZHSBDeferredInit(void) {
+        @try {
+            PCZHInitTables();
+            NSString *base = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
+            Dl_info di;
+            if (dladdr((void *)PCZHSBDeferredInit, &di) && di.dli_fname) {
+                NSString *self_ = [NSString stringWithUTF8String:di.dli_fname];
+                NSRange r = [self_ rangeOfString:@".jbroot-"];
+                if (r.location != NSNotFound) {
+                    NSString *rest = [self_ substringFromIndex:r.location];
+                    NSRange slash = [rest rangeOfString:@"/"];
+                    if (slash.location != NSNotFound) {
+                        NSString *jbroot = [self_ substringToIndex:r.location + slash.location];
+                        base = [NSString stringWithFormat:@"%@/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist", jbroot];
+                    }
+                }
+            }
+            NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:base];
+            if (file && [file[@"registeredCustomActionsData"] isKindOfClass:[NSDictionary class]]) {
+                NSMutableDictionary *pf = [file mutableCopy];
+                pf[@"registeredCustomActionsData"] = PCZHL10N(pf[@"registeredCustomActionsData"]);
+                if ([pf writeToFile:base atomically:YES]) notify_post("com.anthopak.powercuts.dataChanged");
+            }
+        } @catch (id e) {}
 }
 
 %ctor {

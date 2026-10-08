@@ -1,1 +1,11 @@
-{ Filter = { Bundles = ( "com.apple.springboard", "com.apple.shortcuts", "com.apple.WorkflowKit.BackgroundShortcutRunner", "com.apple.WorkflowKit.ShortcutsIntents" ); }; }
+{
+    Filter = {
+        Bundles = (
+            "com.apple.springboard",
+            "com.apple.shortcuts",
+            "com.apple.Preferences",
+            "com.apple.WorkflowKit.BackgroundShortcutRunner",
+            "com.apple.WorkflowKit.ShortcutsIntents",
+        );
+    };
+}
