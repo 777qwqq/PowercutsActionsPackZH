@@ -406,11 +406,11 @@ static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh63_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh63_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         @try {
@@ -428,10 +428,10 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh63_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {
             [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh63_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         @try {
             Class wfr = objc_getClass("WFActionRegistry");
@@ -567,11 +567,11 @@ static void PCZHDelayedInit(void) {
                     } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
                 }
             } else [report appendString:@"WFActionRegistry nil\n"];
-            [report appendString:@"step=done v0.4.33\n"];
+            [report appendString:@"step=done v0.4.34\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh63_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
