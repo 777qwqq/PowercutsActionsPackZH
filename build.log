@@ -3,9 +3,9 @@
 [0;31m==> [1;39mPreprocessing Actions/PCZH.xm…[m
 [0;32m==> [1;39mCompiling Actions/PCZH.xm (arm64)…[m
 [0;32m==> [1;39mCompiling Actions/PCZH.xm (arm64e)…[m
-[0;33m==> [1;39mLinking tweak zz_pczh (arm64e)…[m
-[0;34m==> [1;39mGenerating debug symbols for zz_pczh…[m
 [0;33m==> [1;39mLinking tweak zz_pczh (arm64)…[m
+[0;34m==> [1;39mGenerating debug symbols for zz_pczh…[m
+[0;33m==> [1;39mLinking tweak zz_pczh (arm64e)…[m
 [0;34m==> [1;39mGenerating debug symbols for zz_pczh…[m
 [0;34m==> [1;39mMerging tweak zz_pczh…[m
 [0;34m==> [1;39mSigning zz_pczh…[m

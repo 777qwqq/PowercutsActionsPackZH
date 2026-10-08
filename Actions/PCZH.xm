@@ -288,9 +288,7 @@ static void PCZHDelayedInit(void);
 }
 
 static IMP g_origGet = NULL;
-static void ZHFixAction(id action);
 
-// getter 翻译：orig 结果 → 翻译副本返回。PCZHL10N 纯函数无回调，无递归面
 static id ZH_cacheGet_imp(id self, SEL _cmd) {
     @try {
         id v = ((id(*)(id, SEL))g_origGet)(self, _cmd);
@@ -300,16 +298,20 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
             for (id item in v) {
                 if ([item isKindOfClass:[NSDictionary class]]) {
                     NSString *ident = item[@"identifier"];
-                    NSString *shortIdent = [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
-                    NSDictionary *tr = g_tr[shortIdent];
+                    NSString *si = [ident hasPrefix:@"com.anthopak.powercuts.action."] ? [ident substringFromIndex:30] : ident;
+                    NSDictionary *tr = g_tr[si];
                     if (tr) {
                         NSMutableDictionary *q = [item mutableCopy];
-                        NSString *nm = tr[@"n"];   if (nm) q[@"name"] = nm;
-                        NSString *ds = tr[@"d"];   if (ds) q[@"descriptionSummary"] = ds;
-                        NSString *sm = tr[@"s"];   if (sm && [sm length]) q[@"parameterSummary"] = sm;
+                        if (tr[@"n"]) q[@"name"] = tr[@"n"];
+                        if (tr[@"d"]) q[@"descriptionSummary"] = tr[@"d"];
+                        if (tr[@"s"] && [(NSString *)tr[@"s"] length]) q[@"parameterSummary"] = tr[@"s"];
                         [out addObject:q];
                         continue;
                     }
+                } else if ([item isKindOfClass:objc_getClass("PCAction")]) {
+                    ZHFixAction(item);
+                    [out addObject:item];
+                    continue;
                 }
                 [out addObject:item];
             }
@@ -319,24 +321,75 @@ static id ZH_cacheGet_imp(id self, SEL _cmd) {
     } @catch (id e) { return ((id(*)(id, SEL))g_origGet)(self, _cmd); }
 }
 
+
+static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hits) {
+    if (depth > 4 || *hits > 50) return 0;
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray *items = [fm contentsOfDirectoryAtPath:dir error:nil];
+    if (!items) return 0;
+    int scanned = 0;
+    for (NSString *f in items) {
+        if (scanned > 500) break;
+        NSString *p = [dir stringByAppendingPathComponent:f];
+        NSDictionary *st = [fm attributesOfItemAtPath:p error:nil];
+        if (!st) continue;
+        if ([st.fileType isEqualToString:NSFileTypeDirectory]) {
+            scanned += ZHScanDir(report, p, depth + 1, hits);
+        } else {
+            unsigned long long sz = [st fileSize];
+            if (sz == 0 || sz > 15 * 1024 * 1024) continue;
+            NSData *d = [NSData dataWithContentsOfFile:p];
+            if (!d) continue;
+            scanned++;
+            if (d.length > 100 && memmem(d.bytes, d.length, "com.anthopak.powercuts.action", 29)) {
+                (*hits)++;
+                [report appendFormat:@"HIT: %@ (%llu KB)\n", p, sz / 1024];
+            }
+        }
+    }
+    return scanned;
+}
+
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             NSMutableString *report = [NSMutableString string];
             [report appendFormat:@"proc=%@\n", [NSProcessInfo processInfo].processName];
-            // 0.4.16：hook PCM getter（全部进程），返回翻译副本
             Class pcm = objc_getClass("PCSharedBucketManager");
             if (pcm) {
-                SEL gs = sel_registerName("registeredCustomActionsCachedData");
-                Method gm = class_getInstanceMethod(pcm, gs);
-                if (gm) {
+                Method gm = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
+                if (gm && !g_origGet) {
                     g_origGet = method_getImplementation(gm);
                     method_setImplementation(gm, (IMP)ZH_cacheGet_imp);
                     [report appendString:@"getter hooked\n"];
-                } else [report appendString:@"getter NOT found\n"];
-            } else [report appendString:@"PCM nil (pack未加载)\n"];
-            [report appendString:@"mode=getter v0.4.16\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh46_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                } else if (!gm) [report appendString:@"getter NOT found\n"];
+            } else [report appendString:@"PCM nil\n"];
+            // 0.4.17：文件系统内容搜索
+            int hits = 0;
+            [report appendString:@"== scan begin ==\n"];
+            NSFileManager *fm = [NSFileManager defaultManager];
+            for (NSString *root in @[@"/var/mobile/Containers/Shared/AppGroup", @"/var/db"]) {
+                NSArray *items = [fm contentsOfDirectoryAtPath:root error:nil];
+                if (!items) { [report appendFormat:@"skip %@\n", root]; continue; }
+                for (NSString *sub in items) {
+                    NSString *p = [root stringByAppendingPathComponent:sub];
+                    BOOL isDir = NO;
+                    [fm fileExistsAtPath:p isDirectory:&isDir];
+                    if (isDir) ZHScanDir(report, p, 1, &hits);
+                    else {
+                        NSDictionary *st = [fm attributesOfItemAtPath:p error:nil];
+                        if (st && st.fileSize > 0 && st.fileSize < 15*1024*1024) {
+                            NSData *d = [NSData dataWithContentsOfFile:p];
+                            if (d && d.length > 100 && memmem(d.bytes, d.length, "com.anthopak.powercuts.action", 29)) {
+                                hits++;
+                                [report appendFormat:@"HIT: %@ (%llu KB)\n", p, st.fileSize / 1024];
+                            }
+                        }
+                    }
+                }
+            }
+            [report appendFormat:@"== scan done hits=%d ==\n", hits];
+            [report appendString:@"mode=fsprobe v0.4.17\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh47_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
-
