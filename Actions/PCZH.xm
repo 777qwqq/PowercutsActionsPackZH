@@ -400,17 +400,45 @@ static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hit
 
 
 
+// 0.4.35：WFActionParameterSummary（画布卡片标题渲染对象）
+static IMP g_origSumInit = NULL, g_origSumTitle = NULL, g_origSumLocTitle = NULL;
+static id ZH_suminit_imp(id self, SEL _cmd, id action, id definition, NSString *title) {
+    id r = ((id(*)(id, SEL, id, id, id))g_origSumInit)(self, _cmd, action, definition, title);
+    @try { objc_setAssociatedObject(self, "zh_action", action, OBJC_ASSOCIATION_RETAIN_NONATOMIC); } @catch (id e) {}
+    return r;
+}
+static NSString *ZH_sumtitle_imp(id self, SEL _cmd) {
+    @try {
+        id act = objc_getAssociatedObject(self, "zh_action");
+        if (act) {
+            NSDictionary *tr = ZHTr([act valueForKey:@"identifier"]);
+            if (tr && tr[@"s"] && [(NSString *)tr[@"s"] length]) return tr[@"s"];
+        }
+    } @catch (id e) {}
+    return ((NSString *(*)(id, SEL))g_origSumTitle)(self, _cmd);
+}
+static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
+    @try {
+        id act = objc_getAssociatedObject(self, "zh_action");
+        if (act) {
+            NSDictionary *tr = ZHTr([act valueForKey:@"identifier"]);
+            if (tr && tr[@"s"] && [(NSString *)tr[@"s"] length]) return tr[@"s"];
+        }
+    } @catch (id e) {}
+    return ((NSString *(*)(id, SEL))g_origSumLocTitle)(self, _cmd);
+}
+
 static void PCZHDelayedInit(void) {
         NSMutableString *report = [NSMutableString string];
         NSString *procName = [NSProcessInfo processInfo].processName;
         @try {
             PCZHInitTables();
             [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         @try {
@@ -428,10 +456,10 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {
             [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         @try {
             Class wfr = objc_getClass("WFActionRegistry");
@@ -525,7 +553,28 @@ static void PCZHDelayedInit(void) {
                 }
                 // WFCustomAction -name（第五打点）+ 全量方法/ivar dump
                 {
-                    Class wcc = objc_getClass("WFCustomAction");
+                    // 0.4.35：WFActionParameterSummary title
+                {
+                    Class wps = objc_getClass("WFActionParameterSummary");
+                    if (wps) {
+                        Method im = class_getInstanceMethod(wps, sel_registerName("initWithAction:definition:title:"));
+                        if (im && !g_origSumInit) {
+                            g_origSumInit = method_getImplementation(im);
+                            method_setImplementation(im, (IMP)ZH_suminit_imp);
+                        }
+                        Method tm = class_getInstanceMethod(wps, sel_registerName("title"));
+                        if (tm && !g_origSumTitle) {
+                            g_origSumTitle = method_getImplementation(tm);
+                            method_setImplementation(tm, (IMP)ZH_sumtitle_imp);
+                        }
+                        Method lm = class_getInstanceMethod(wps, sel_registerName("localizedTitle"));
+                        if (lm && !g_origSumLocTitle) {
+                            g_origSumLocTitle = method_getImplementation(lm);
+                            method_setImplementation(lm, (IMP)ZH_sumloctitle_imp);
+                        }
+                    }
+                }
+                Class wcc = objc_getClass("WFCustomAction");
                     if (wcc) {
                         { NSMutableString *chain = [NSMutableString string]; Class c = wcc; while (c) { [chain appendFormat:@"%@ <- ", NSStringFromClass(c)]; c = class_getSuperclass(c); } [report appendFormat:@"== WC chain: %@ ==\n", chain]; }
                         [report appendString:@"== WC methods ==\n"];
@@ -567,11 +616,11 @@ static void PCZHDelayedInit(void) {
                     } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
                 }
             } else [report appendString:@"WFActionRegistry nil\n"];
-            [report appendString:@"step=done v0.4.34\n"];
+            [report appendString:@"step=done v0.4.35\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh64_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh65_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
