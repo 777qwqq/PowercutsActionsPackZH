@@ -85,6 +85,52 @@ static IMP ZHOrig(id self, NSString *kind) {
     return (IMP)[g_origs[[NSString stringWithFormat:@"%@|%@", NSStringFromClass([self class]), kind]] pointerValue];
 }
 
+
+static NSMutableSet *g_calls = nil;
+static IMP ZHOrigM(id self, NSString *kind) {
+    return (IMP)[g_origs[[NSString stringWithFormat:@"M_%@|%@", NSStringFromClass(self), kind]] pointerValue];
+}
+static void ZHLogCall(NSString *ident) {
+    if (!g_calls) g_calls = [NSMutableSet new];
+    if ([g_calls containsObject:ident]) return;
+    [g_calls addObject:ident];
+    NSMutableString *log = [NSMutableString stringWithContentsOfFile:@"/var/mobile/Documents/pczh36_calls.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+    [log appendFormat:@"%@\n", ident];
+    [log writeToFile:@"/var/mobile/Documents/pczh36_calls.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+static NSString *ZH_cname_imp(id self, SEL _cmd, NSString *ident) {
+    ZHLogCall(ident);
+    NSDictionary *tr = g_tr[ident];
+    if (tr[@"n"]) return tr[@"n"];
+    IMP o = ZHOrigM(self, @"cname");
+    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : ident;
+}
+static NSString *ZH_cdesc_imp(id self, SEL _cmd, NSString *ident) {
+    NSDictionary *tr = g_tr[ident];
+    if (tr[@"d"]) return tr[@"d"];
+    IMP o = ZHOrigM(self, @"cdesc");
+    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : @"";
+}
+static NSString *ZH_csummary_imp(id self, SEL _cmd, NSString *ident) {
+    NSDictionary *tr = g_tr[ident];
+    if (tr[@"s"] && [(NSString *)tr[@"s"] length]) return tr[@"s"];
+    IMP o = ZHOrigM(self, @"csummary");
+    return o ? ((NSString *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : @"";
+}
+static NSArray *ZH_cparams_imp(id self, SEL _cmd, NSString *ident) {
+    IMP o = ZHOrigM(self, @"cparams");
+    NSArray *arr = o ? ((NSArray *(*)(id, SEL, NSString *))o)(self, _cmd, ident) : nil;
+    if (!arr.count) return arr;
+    NSMutableArray *out = [NSMutableArray array];
+    for (NSDictionary *p in arr) {
+        NSMutableDictionary *q = [p mutableCopy];
+        id lab = q[@"Label"];      if (lab) q[@"Label"] = g_lab[lab] ?: lab;
+        id ph  = q[@"Placeholder"]; if (ph) q[@"Placeholder"] = g_lab[ph] ?: ph;
+        [out addObject:q];
+    }
+    return out;
+}
+
 #pragma mark - 替换实现
 
 static NSString *ZH_name_imp(id self, SEL _cmd, NSString *ident) {
@@ -187,6 +233,22 @@ static void ZHHookClass(Class cls) {
     HOOK("parameterSummaryForIdentifier:", @"summary", ZH_summary_imp);
     HOOK("parametersDefinitionForIdentifier:", @"params", ZH_params_imp);
 #undef HOOK
+#define CHOOK(selName, kind, imp) do { \
+    SEL s = sel_registerName(selName); \
+    Class meta = object_getClass(cls); \
+    Method m = class_getInstanceMethod(meta, s); \
+    if (m && class_addMethod(meta, s, (IMP)imp, method_getTypeEncoding(m)) == NO) { \
+        g_origs[[NSString stringWithFormat:@"M_%@|%@", cn, kind]] = [NSValue valueWithPointer:(void *)method_getImplementation(m)]; \
+        method_setImplementation(m, (IMP)imp); \
+    } else if (m) { \
+        g_origs[[NSString stringWithFormat:@"M_%@|%@", cn, kind]] = NULL; \
+    } \
+} while(0)
+    CHOOK("nameForIdentifier:", @"cname", ZH_cname_imp);
+    CHOOK("descriptionSummaryForIdentifier:", @"cdesc", ZH_cdesc_imp);
+    CHOOK("parameterSummaryForIdentifier:", @"csummary", ZH_csummary_imp);
+    CHOOK("parametersDefinitionForIdentifier:", @"cparams", ZH_cparams_imp);
+#undef CHOOK
 }
 
 %ctor {
