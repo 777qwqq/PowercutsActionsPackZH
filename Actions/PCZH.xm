@@ -258,57 +258,32 @@ static void PCZHDelayedInit(void);
 static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
-            g_origs = [NSMutableDictionary new];
+            // 0.4.9：纯文件翻译层。全部方法 hook 已摘除——
+            // 零延迟下方法 hook 会卷入 Shortcuts cacheUpdateAndFillQueue 初始同步的递归（0.4.7/0.4.8 崩溃实证）
+            NSString *path = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
+            NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
             NSMutableString *report = [NSMutableString string];
-            int num = objc_getClassList(NULL, 0);
-            if (num <= 0) return;
-            Class *classes = (__unsafe_unretained Class *)malloc(sizeof(Class) * num);
-            objc_getClassList(classes, num);
-            Class pcAction = objc_getClass("PCAction");
-            int hooked = 0;
-            if (pcAction) {
-                for (int i = 0; i < num; i++) {
-                    Class c = classes[i];
-                    BOOL isSub = NO;
-                    Class p = class_getSuperclass(c);
-                    while (p) {
-                        if (p == pcAction) { isSub = YES; break; }
-                        p = class_getSuperclass(p);
+            if (file) {
+                NSMutableDictionary *pf = [file mutableCopy];
+                id inner = pf[@"registeredActionsData.plist"];
+                if ([inner isKindOfClass:[NSDictionary class]]) {
+                    NSDictionary *tr = PCZHL10N(inner);
+                    pf[@"registeredActionsData.plist"] = tr;
+                    [pf writeToFile:path atomically:YES];
+                    notify_post("com.anthopak.powercuts.dataChanged");
+                    int n = 0;
+                    for (NSString *k in tr) {
+                        if ([k hasPrefix:@"com.anthopak.powercuts.action."]) n++;
                     }
-                    if (isSub) { ZHHookClass(c); hooked++; [report appendFormat:@"%@\n", NSStringFromClass(c)]; }
+                    [report appendFormat:@"file-translated actions=%d\n", n];
+                } else {
+                    [report appendString:@"file present, inner key missing\n"];
                 }
+            } else {
+                [report appendString:@"cache file not found\n"];
             }
-            free(classes);
-            [report insertString:[NSString stringWithFormat:@"hooked=%d PCAction=%@\n", hooked, pcAction ? @"存在" : @"不存在"] atIndex:0];
-            [report writeToFile:@"/var/mobile/Documents/pczh37_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-
-            // getter swizzle: 缓存读取全走中文
-            Class bm = objc_getClass("PCSharedBucketManager");
-            if (bm) {
-                Method m = class_getInstanceMethod(bm, sel_registerName("registeredCustomActionsCachedData"));
-                if (m) method_setImplementation(m, (IMP)ZH_cachedData_imp);
-            }
-            // 写入路径 hook: 注册写缓存前先翻译
-            Method m2 = class_getInstanceMethod(bm, sel_registerName("storeNewRegisteredCustomActionsCachedData:"));
-            if (m2) {
-                origStore = method_getImplementation(m2);
-                method_setImplementation(m2, (IMP)ZH_store_imp);
-            }
-
-            // 缓存文件中文化（读原文件→翻译→写回）
-            @try {
-                NSString *path = @"/var/mobile/Library/Preferences/com.anthopak.powercuts.registeredActionsData.plist";
-                NSDictionary *file = [NSDictionary dictionaryWithContentsOfFile:path];
-                if (file) {
-                    NSMutableDictionary *pf = [file mutableCopy];
-                    id inner = pf[@"registeredActionsData.plist"];
-                    if ([inner isKindOfClass:[NSDictionary class]]) {
-                        pf[@"registeredActionsData.plist"] = PCZHL10N(inner);
-                        [pf writeToFile:path atomically:YES];
-                        notify_post("com.anthopak.powercuts.dataChanged");
-                    }
-                }
-            } @catch (id e) {}
+            [report appendString:@"mode=file-only v0.4.9\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh39_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {}
 }
 
