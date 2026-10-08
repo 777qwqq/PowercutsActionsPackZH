@@ -262,52 +262,61 @@ static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hit
 }
 
 static void PCZHDelayedInit(void) {
+        NSMutableString *report = [NSMutableString string];
+        NSString *procName = [NSProcessInfo processInfo].processName;
         @try {
             PCZHInitTables();
-            NSMutableString *report = [NSMutableString string];
-            NSString *procName = [NSProcessInfo processInfo].processName;
-            [report appendFormat:@"proc=%@\n", procName];
-            if ([procName isEqualToString:@"Shortcuts"]) {
-                [report appendString:@"getter: observation-only (not hooked)\n"];
-                @try {
-                    NSFileManager *fm = [NSFileManager defaultManager];
-                    int hits = 0;
-                    for (NSString *root in @[@"/var/mobile/Containers/Data/Application", @"/var/mobile/Containers/Shared/AppGroup"]) {
-                        for (NSString *uuid in [fm contentsOfDirectoryAtPath:root error:nil]) {
-                            if (hits > 15) break;
-                            NSString *cpath = [root stringByAppendingPathComponent:uuid];
-                            NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
-                            NSString *bid = [meta[@"MCMMetadataIdentifier"] isKindOfClass:[NSString class]] ? meta[@"MCMMetadataIdentifier"] : @"";
-                            if (![bid containsString:@"shortcut"] && ![bid containsString:@"workflow"]) continue;
-                            [report appendFormat:@"C: %@\n", cpath];
-                            ZHScanDir(report, cpath, 2, &hits);
-                        }
-                    }
-                    [report appendFormat:@"scan hits=%d\n", hits];
-                } @catch (id e) {}
-                Class wfr = objc_getClass("WFActionRegistry");
-                if (wfr) {
-                    int n = 4;
-                    SEL sl[4]; IMP *og[4]; IMP rp[4]; const char *tg[4];
-                    sl[0] = sel_registerName("createActionWithIdentifier:serializedParameters:");            og[0] = &g_origCreate;      rp[0] = (IMP)ZH_create_imp;      tg[0] = "create1";
-                    sl[1] = sel_registerName("createActionsWithIdentifiers:serializedParameterArray:");      og[1] = &g_origCreateMulti; rp[1] = (IMP)ZH_createmulti_imp; tg[1] = "createN";
-                    sl[2] = sel_registerName("addActions:fromActionProvider:");                              og[2] = &g_origAdd;         rp[2] = (IMP)ZH_add_imp;         tg[2] = "add";
-                    sl[3] = sel_registerName("setActions:forProvider:");                                     og[3] = &g_origSet;         rp[3] = (IMP)ZH_set_imp;         tg[3] = "set";
-                    for (int hi = 0; hi < n; hi++) {
-                        Method cm = class_getInstanceMethod(wfr, sl[hi]);
-                        if (cm && !*og[hi]) {
-                            *og[hi] = method_getImplementation(cm);
-                            method_setImplementation(cm, rp[hi]);
-                            [report appendFormat:@"%s hooked\n", tg[hi]];
-                        } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
-                    }
-                } else [report appendString:@"WFActionRegistry nil\n"];
-            } else {
-                [report appendString:@"registry hooks skipped (not Shortcuts)\n"];
+            [report appendFormat:@"proc=%@ step=entry\n", procName];
+            [report writeToFile:@"/var/mobile/Documents/pczh54_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        } @catch (id e) { return; }
+        if (![procName isEqualToString:@"Shortcuts"]) {
+            [report appendString:@"skipped (not Shortcuts)\n"];
+            [report writeToFile:@"/var/mobile/Documents/pczh54_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            return;
+        }
+        @try {
+            NSFileManager *fm = [NSFileManager defaultManager];
+            int hits = 0;
+            for (NSString *root in @[@"/var/mobile/Containers/Data/Application", @"/var/mobile/Containers/Shared/AppGroup"]) {
+                for (NSString *uuid in [fm contentsOfDirectoryAtPath:root error:nil]) {
+                    if (hits > 15) break;
+                    NSString *cpath = [root stringByAppendingPathComponent:uuid];
+                    NSDictionary *meta = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
+                    NSString *bid = [meta[@"MCMMetadataIdentifier"] isKindOfClass:[NSString class]] ? meta[@"MCMMetadataIdentifier"] : @"";
+                    if (![bid containsString:@"shortcut"] && ![bid containsString:@"workflow"]) continue;
+                    [report appendFormat:@"C: %@\n", cpath];
+                    ZHScanDir(report, cpath, 2, &hits);
+                }
             }
-            [report appendString:@"mode=observe v0.4.23\n"];
-            [report writeToFile:@"/var/mobile/Documents/pczh53_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        } @catch (id e) {}
+            [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
+            [report writeToFile:@"/var/mobile/Documents/pczh54_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        } @catch (id e) {
+            [report appendFormat:@"scan CRASHED: %@\n", e];
+            [report writeToFile:@"/var/mobile/Documents/pczh54_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+        @try {
+            Class wfr = objc_getClass("WFActionRegistry");
+            if (wfr) {
+                int n = 4;
+                SEL sl[4]; IMP *og[4]; IMP rp[4]; const char *tg[4];
+                sl[0] = sel_registerName("createActionWithIdentifier:serializedParameters:");            og[0] = &g_origCreate;      rp[0] = (IMP)ZH_create_imp;      tg[0] = "create1";
+                sl[1] = sel_registerName("createActionsWithIdentifiers:serializedParameterArray:");      og[1] = &g_origCreateMulti; rp[1] = (IMP)ZH_createmulti_imp; tg[1] = "createN";
+                sl[2] = sel_registerName("addActions:fromActionProvider:");                              og[2] = &g_origAdd;         rp[2] = (IMP)ZH_add_imp;         tg[2] = "add";
+                sl[3] = sel_registerName("setActions:forProvider:");                                     og[3] = &g_origSet;         rp[3] = (IMP)ZH_set_imp;         tg[3] = "set";
+                for (int hi = 0; hi < n; hi++) {
+                    Method cm = class_getInstanceMethod(wfr, sl[hi]);
+                    if (cm && !*og[hi]) {
+                        *og[hi] = method_getImplementation(cm);
+                        method_setImplementation(cm, rp[hi]);
+                        [report appendFormat:@"%s hooked\n", tg[hi]];
+                    } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
+                }
+            } else [report appendString:@"WFActionRegistry nil\n"];
+            [report appendString:@"step=done v0.4.24\n"];
+        } @catch (id e) {
+            [report appendFormat:@"hooks CRASHED: %@\n", e];
+        }
+        [report writeToFile:@"/var/mobile/Documents/pczh54_hooked.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
