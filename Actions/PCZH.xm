@@ -244,11 +244,7 @@ static void ZHHookClass(Class cls) {
         g_origs[[NSString stringWithFormat:@"M_%@|%@", cn, kind]] = NULL; \
     } \
 } while(0)
-    CHOOK("nameForIdentifier:", @"cname", ZH_cname_imp);
-    CHOOK("descriptionSummaryForIdentifier:", @"cdesc", ZH_cdesc_imp);
-    CHOOK("parameterSummaryForIdentifier:", @"csummary", ZH_csummary_imp);
-    CHOOK("parametersDefinitionForIdentifier:", @"cparams", ZH_cparams_imp);
-#undef CHOOK
+#undef CHOOK /* 0.4.8 摘除：类方法 hook 无命中且在早期初始化路径引发无限递归（0.4.7 崩溃实证）*/
 }
 
 static void PCZHDelayedInit(void);
