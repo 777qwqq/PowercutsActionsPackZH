@@ -463,6 +463,7 @@ static void PCZHSBInit(void) {
                 Class cls = objc_getClass(names[i]);
                 if (!cls) continue;
                 NSString *nm = [NSString stringWithUTF8String:names[i]];
+                BOOL isDismiss = [nm.lowercaseString containsString:@"siri"];
                 // 只包装 perform 重载的类（全部包装会拖慢无关类）
                 if (class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:")) ||
                     class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:")) ||
@@ -470,7 +471,6 @@ static void PCZHSBInit(void) {
                     ZHSBHookClass(cls, nm);
                     hooked++;
                     if (isDismiss) ZHSBLog([NSString stringWithFormat:@"[Siri 类] %@\n", nm]);
-                    if (isGoHome) ZHSBLog([NSString stringWithFormat:@"[goHome 类] %@\n", nm]);
                 }
             }
             Class sac = objc_getClass("SBAssistantController");
