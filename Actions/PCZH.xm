@@ -380,6 +380,121 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
+#pragma mark - SpringBoard 稳定性层 + 关闭Siri 修复（0.5.3）
+static IMP g_goHomeOrig = NULL;
+static Class g_goHomeCls = nil;
+static void ZHSBLog(NSString *line) {
+    @try {
+        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/pczh76_sb.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+        [lg appendString:line];
+        [lg writeToFile:@"/var/mobile/pczh76_sb.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    } @catch (id e) {}
+}
+// 关闭Siri 的 iOS 16.3 可用实现（级联回退）
+static void ZHSBDismissSiri(void) {
+    // 1) SBAssistantController 私有接口
+    @try {
+        Class sac = objc_getClass("SBAssistantController");
+        if (sac) {
+            id inst = ((id(*)(id, SEL))objc_msgSend)(sac, sel_registerName("sharedInstance"));
+            if (inst) {
+                SEL ds = sel_registerName("dismissSiri");
+                if ([inst respondsToSelector:ds]) {
+                    ((void(*)(id, SEL))objc_msgSend)(inst, ds);
+                    ZHSBLog(@"[关闭Siri] SBAssistantController dismissSiri ✓\n");
+                    return;
+                }
+            }
+        }
+    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] SBAssistantController 失败: %@\n", e]); }
+    // 2) 复用 Pack 自带回主屏幕（16.3 已验证可用）
+    @try {
+        if (g_goHomeOrig && g_goHomeCls) {
+            id inst = [[g_goHomeCls alloc] init];
+            if (inst) {
+                ((void(*)(id, SEL, id, id))g_goHomeOrig)(inst, sel_registerName("performActionForIdentifier:withParameters:"), @"com.anthopak.powercuts.action.goHome", @{});
+                ZHSBLog(@"[关闭Siri] goHome 回退 ✓\n");
+                return;
+            }
+        }
+    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] goHome 回退失败: %@\n", e]); }
+    ZHSBLog(@"[关闭Siri] 所有回退均失败\n");
+}
+static void ZHSBWrapAndLog(NSString *ident, NSException *e) {
+    ZHSBLog([NSString stringWithFormat:@"[捕获] ident=%@ 异常=%@\n", ident, e]);
+    if ([ident isKindOfClass:[NSString class]] && [ident containsString:@"dismissSiri"]) ZHSBDismissSiri();
+}
+// 三种 perform 签名的包装器（逐类捕获原始 IMP）
+static void ZHSBHookClass(Class cls, NSString *name) {
+    const char *sels1[1] = {"performActionForIdentifier:"};
+    // 1 参
+    Method m1 = class_getInstanceMethod(cls, sel_registerName(sels1[0]));
+    if (m1) {
+        IMP orig = method_getImplementation(m1);
+        id blk = ^(id slf, id ident) {
+            @try { return ((id(*)(id, SEL, id))orig)(slf, sel_registerName(sels1[0]), ident); }
+            @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
+        };
+        method_setImplementation(m1, imp_implementationWithBlock(blk));
+    }
+    // 2 参
+    Method m2 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:"));
+    if (m2) {
+        IMP orig = method_getImplementation(m2);
+        id blk = ^(id slf, id ident, id params) {
+            @try { return ((id(*)(id, SEL, id, id))orig)(slf, sel_registerName("performActionForIdentifier:withParameters:"), ident, params); }
+            @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
+        };
+        method_setImplementation(m2, imp_implementationWithBlock(blk));
+    }
+    // 4 参
+    Method m4 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:success:fail:"));
+    if (m4) {
+        IMP orig = method_getImplementation(m4);
+        id blk = ^(id slf, id ident, id params, id success, id fail) {
+            @try { return ((id(*)(id, SEL, id, id, id, id))orig)(slf, sel_registerName("performActionForIdentifier:withParameters:success:fail:"), ident, params, success, fail); }
+            @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
+        };
+        method_setImplementation(m4, imp_implementationWithBlock(blk));
+    }
+}
+static void PCZHSBInit(void) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        @try {
+            const char *img = NULL;
+            for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+                const char *n = _dyld_get_image_name(i);
+                if (n && strstr(n, "PowercutsActionsPack.dylib")) { img = n; break; }
+            }
+            if (!img) { ZHSBLog(@"PowercutsActionsPack 镜像未找到\n"); return; }
+            unsigned int count = 0;
+            const char **names = objc_copyClassNamesForImage(img, &count);
+            int hooked = 0;
+            for (unsigned int i = 0; i < count; i++) {
+                Class cls = objc_getClass(names[i]);
+                if (!cls) continue;
+                NSString *nm = [NSString stringWithUTF8String:names[i]];
+                BOOL isGoHome = [nm.lowercaseString containsString:@"gohome"];
+                BOOL isDismiss = [nm.lowercaseString containsString:@"siri"];
+                if (isGoHome) { g_goHomeCls = cls; g_goHomeOrig = NULL;
+                    Method m2 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:"));
+                    if (m2) g_goHomeOrig = method_getImplementation(m2);
+                }
+                // 只包装 perform 重载的类（全部包装会拖慢无关类）
+                if (class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:")) ||
+                    class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:")) ||
+                    class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:success:fail:"))) {
+                    ZHSBHookClass(cls, nm);
+                    hooked++;
+                    if (isDismiss) ZHSBLog([NSString stringWithFormat:@"[Siri 类] %@\n", nm]);
+                    if (isGoHome) ZHSBLog([NSString stringWithFormat:@"[goHome 类] %@\n", nm]);
+                }
+            }
+            ZHSBLog([NSString stringWithFormat:@"== SB 稳定性层就绪: 类 %u, hook %d, goHome=%@ ==\n", count, hooked, g_goHomeCls]);
+        } @catch (id e) {}
+    });
+}
+
 #pragma mark - 主入口
 
 static void PCZHPrefsInit(void) {
@@ -418,6 +533,10 @@ static void PCZHDelayedInit(void) {
         PCZHInitTables();
     } @catch (id e) { return; }
 
+    if ([procName isEqualToString:@"SpringBoard"]) {
+        PCZHSBInit();
+        return;
+    }
     if ([procName isEqualToString:@"Preferences"] || [procName isEqualToString:@"Powercuts"]) {
         PCZHPrefsInit();
         return;
