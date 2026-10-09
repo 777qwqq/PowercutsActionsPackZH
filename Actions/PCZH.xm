@@ -631,7 +631,7 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
 
 // 0.4.47：决定性探针——导航栈类名 + App 内 plist 全提
 static IMP g_origPush = NULL;
-static void ZH_push_imp(id self, SEL _cmd, UIViewController *vc, BOOL animated) {
+static void ZH_push_imp(id self, SEL _cmd, id vc, BOOL animated) {
     @try {
         static int nv = 0;
         if (nv < 30) { nv++;
