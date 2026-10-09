@@ -760,24 +760,55 @@ static void PCZHPlistDump(void) {
         NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh72_plist.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
         if (lg.length > 100) return; // 已 dump 过
         NSFileManager *fm = [NSFileManager defaultManager];
-        NSArray *dirs = @[@"/var/jb/Library/PreferenceLoaders", @"/var/jb/Library/PreferenceBundles", @"/var/jb/Applications", @"/Applications"];
         int dumped = 0;
-        for (NSString *dir in dirs) {
-            if (dumped >= 3) break;
-            NSArray *paths = [fm subpathsOfDirectoryAtPath:dir error:nil] ?: @[];
+        // A: jbroot 全树搜任意 powercuts 文件
+        NSArray *roots = @[@"/var/jb/Library", @"/var/jb/usr/share", @"/var/jb/Applications", @"/Applications"];
+        for (NSString *root in roots) {
+            if (dumped >= 4) break;
+            NSArray *paths = [fm subpathsOfDirectoryAtPath:root error:nil] ?: @[];
             for (NSString *rel in paths) {
-                if (dumped >= 3) break;
+                if (dumped >= 4) break;
                 if (![rel.lowercaseString containsString:@"powercuts"]) continue;
-                if (![rel hasSuffix:@".plist"] && ![rel hasSuffix:@".strings"]) continue;
-                NSString *full = [dir stringByAppendingPathComponent:rel];
+                if (![rel hasSuffix:@".plist"] && ![rel hasSuffix:@".strings"] && ![rel hasSuffix:@".html"] && ![rel hasSuffix:@".txt"]) continue;
+                NSString *full = [root stringByAppendingPathComponent:rel];
                 NSDictionary *st = [fm attributesOfItemAtPath:full error:nil];
-                if (!st || [st fileSize] > 200000) continue;
+                if (!st || [st fileSize] > 300000) continue;
                 NSData *data = [NSData dataWithContentsOfFile:full];
                 if (!data) continue;
                 id obj = [NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:nil];
                 NSString *text = obj ? [obj description] : [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"" description];
+                if (text.length > 6000) text = [text substringToIndex:6000];
                 [lg appendFormat:@"===== %@ (%lu bytes) =====\n%@\n\n", full, (unsigned long)st.fileSize, text];
                 dumped++;
+            }
+        }
+        // B: 应用容器搜 Powercuts App 的 plist/strings
+        for (NSString *uuid in [fm contentsOfDirectoryAtPath:@"/var/containers/Bundle/Application" error:nil]) {
+            if (dumped >= 6) break;
+            NSString *cpath = [@"/var/containers/Bundle/Application" stringByAppendingPathComponent:uuid];
+            NSString *meta = [cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"];
+            NSDictionary *mm = [NSDictionary dictionaryWithContentsOfFile:meta];
+            NSString *bid = mm[@"MCMMetadataIdentifier"] ?: @"";
+            if (![bid.lowercaseString containsString:@"powercuts"] && ![bid.lowercaseString containsString:@"anthopak"]) continue;
+            NSArray *apps = [fm contentsOfDirectoryAtPath:cpath error:nil] ?: @[];
+            for (NSString *app in apps) {
+                if (![app hasSuffix:@".app"]) continue;
+                NSString *apath = [cpath stringByAppendingPathComponent:app];
+                NSArray *files = [fm subpathsOfDirectoryAtPath:apath error:nil] ?: @[];
+                int cnt = 0;
+                for (NSString *f in files) {
+                    if (cnt >= 3 || dumped >= 6) break;
+                    if (![f.lowercaseString containsString:@"powercuts"]) continue;
+                    if (![f hasSuffix:@".plist"] && ![f hasSuffix:@".strings"]) continue;
+                    NSString *full = [apath stringByAppendingPathComponent:f];
+                    NSData *data = [NSData dataWithContentsOfFile:full];
+                    if (!data) continue;
+                    id obj = [NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:nil];
+                    NSString *text = obj ? [obj description] : [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"" description];
+                    if (text.length > 6000) text = [text substringToIndex:6000];
+                    [lg appendFormat:@"===== %@ =====\n%@\n\n", full, text];
+                    dumped++; cnt++;
+                }
             }
         }
         [lg appendFormat:@"dumped=%d\n", dumped];
@@ -1057,7 +1088,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.45\n"];
+            [report appendString:@"step=done v0.4.46\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
