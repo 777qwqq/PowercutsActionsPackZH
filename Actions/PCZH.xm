@@ -403,45 +403,57 @@ static void PCZHPrefsInit(void) {
 
 #pragma mark - 主入口
 
+static void PCZHPrefsInit(void) {
+    @try {
+        PCZHInitSettingsMap();
+        Class pss = objc_getClass("PSSpecifier");
+        if (pss) {
+            Method nm = class_getInstanceMethod(pss, sel_registerName("name"));
+            if (nm && !g_origSpecName) { g_origSpecName = method_getImplementation(nm); method_setImplementation(nm, (IMP)ZH_specname_imp); }
+            Method pm = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
+            if (pm && !g_origSpecProp) { g_origSpecProp = method_getImplementation(pm); method_setImplementation(pm, (IMP)ZH_specprop_imp); }
+        }
+        Class pcsp = objc_getClass("PCSPrefsListController");
+        if (pcsp) {
+            Method ms2 = class_getInstanceMethod(pcsp, sel_registerName("setSpecifiers:"));
+            if (ms2 && !g_origSetSpecs2) { g_origSetSpecs2 = method_getImplementation(ms2); method_setImplementation(ms2, (IMP)ZH_setspecs2_imp); }
+        }
+    } @catch (id e) {}
+}
+
 static void PCZHDelayedInit(void) {
-    NSMutableString *report = [NSMutableString string];
     NSString *procName = [NSProcessInfo processInfo].processName;
     @try {
         PCZHInitTables();
-        [report appendFormat:@"proc=%@ step=entry\n", procName];
     } @catch (id e) { return; }
 
     if ([procName isEqualToString:@"Preferences"] || [procName isEqualToString:@"Powercuts"]) {
         PCZHPrefsInit();
-        [report appendString:@"prefs-init done\n"];
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         return;
     }
     if (![procName isEqualToString:@"Shortcuts"]) {
-        [report appendString:@"skipped (not Shortcuts)\n"];
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         return;
     }
 
     @try {
+        // WFCustomAction：name/descriptionSummary/description（列表+详情）
         Class wcc = objc_getClass("WFCustomAction");
         if (wcc) {
             Method m = class_getInstanceMethod(wcc, sel_registerName("name"));
-            if (m && !g_origWCName) { g_origWCName = method_getImplementation(m); method_setImplementation(m, (IMP)ZH_wcname_imp); [report appendString:@"WC-name hooked\n"]; }
+            if (m && !g_origWCName) { g_origWCName = method_getImplementation(m); method_setImplementation(m, (IMP)ZH_wcname_imp); }
             Method md = class_getInstanceMethod(wcc, sel_registerName("descriptionSummary"));
-            if (md && !g_origWCDs) { g_origWCDs = method_getImplementation(md); method_setImplementation(md, (IMP)ZH_dsummary_imp); [report appendString:@"WC-dsummary hooked\n"]; }
+            if (md && !g_origWCDs) { g_origWCDs = method_getImplementation(md); method_setImplementation(md, (IMP)ZH_dsummary_imp); }
             Method mdd = class_getInstanceMethod(wcc, sel_registerName("description"));
-            if (mdd && !g_origWCDesc) { g_origWCDesc = method_getImplementation(mdd); method_setImplementation(mdd, (IMP)ZH_desc_imp); [report appendString:@"WC-desc hooked\n"]; }
-        } else [report appendString:@"WFCustomAction nil\n"];
-
+            if (mdd && !g_origWCDesc) { g_origWCDesc = method_getImplementation(mdd); method_setImplementation(mdd, (IMP)ZH_desc_imp); }
+        }
+        // PCSharedBucketManager 缓存 getter（画布数据源，深度翻译）
         Class pcm = objc_getClass("PCSharedBucketManager");
         if (pcm) {
             Method mg = class_getInstanceMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
-            BOOL cg = NO;
-            if (!mg) { mg = class_getClassMethod(pcm, sel_registerName("registeredCustomActionsCachedData")); cg = YES; }
-            if (mg && !g_origCacheGet) { g_origCacheGet = method_getImplementation(mg); method_setImplementation(mg, (IMP)ZH_cacheget_imp); [report appendFormat:@"%scacheGet hooked\n", cg ? "+" : "-"]; }
-        } else [report appendString:@"PCSharedBucketManager nil\n"];
-
+            if (!mg) mg = class_getClassMethod(pcm, sel_registerName("registeredCustomActionsCachedData"));
+            if (mg && !g_origCacheGet) { g_origCacheGet = method_getImplementation(mg); method_setImplementation(mg, (IMP)ZH_cacheget_imp); }
+        }
+        // PCAction 显示接口（名称/描述/摘要）
         Class pss2 = objc_getClass("PCAction");
         if (pss2) {
             const char *pcsels[3] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:"};
@@ -449,20 +461,20 @@ static void PCZHDelayedInit(void) {
             IMP imps2[3] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp};
             for (int pi = 0; pi < 3; pi++) {
                 Method cm = class_getInstanceMethod(pss2, sel_registerName(pcsels[pi]));
-                BOOL isClass = NO;
-                if (!cm) { cm = class_getClassMethod(pss2, sel_registerName(pcsels[pi])); isClass = YES; }
+                if (!cm) cm = class_getClassMethod(pss2, sel_registerName(pcsels[pi]));
                 if (cm && !*imps[pi]) {
                     *imps[pi] = method_getImplementation(cm);
                     method_setImplementation(cm, imps2[pi]);
-                    [report appendFormat:@"%s%s hooked\n", isClass ? "+" : "-", pcsels[pi]];
-                } else if (!cm) [report appendFormat:@"%s NOT found\n", pcsels[pi]];
+                }
             }
-        } else [report appendString:@"PCAction nil\n"];
-        [report appendString:@"step=done v0.4.50\n"];
-    } @catch (id e) {
-        [report appendFormat:@"hooks CRASHED: %@\n", e];
-    }
-    [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+        // UILabel 显示层兜底（参数标签）
+        Class ul = objc_getClass("UILabel");
+        if (ul) {
+            Method us = class_getInstanceMethod(ul, sel_registerName("setText:"));
+            if (us && !g_origSetText) { g_origSetText = method_getImplementation(us); method_setImplementation(us, (IMP)ZH_settext_imp); }
+        }
+    } @catch (id e) {}
 }
 
 %ctor {
