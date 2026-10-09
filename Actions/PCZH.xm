@@ -735,7 +735,7 @@ static IMP g_origSetSpecs = NULL;
 static void ZH_setspecs_imp(id self, SEL _cmd, NSArray *specs) {
     ((void(*)(id, SEL, NSArray *))g_origSetSpecs)(self, _cmd, specs);
     @try {
-        for (PSSpecifier *spec in specs) {
+        for (id spec in specs) {
             if (![spec isKindOfClass:objc_getClass("PSSpecifier")]) continue;
             for (NSString *key in @[@"name", @"header", @"footerText", @"title", @"label"]) {
                 @try {
