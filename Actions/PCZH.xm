@@ -630,7 +630,7 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
 }
 
 // 0.4.40：设置页（Preferences 进程）—— PSSpecifier 拦截 + 全量 dump
-static IMP g_origSpecName = NULL, g_origSetProp = NULL, g_origGetProp = NULL;
+static IMP g_origSpecName = NULL, g_origGetProp = NULL;
 static NSDictionary *g_prefsTr = nil;
 
 // 长文本：精确匹配 → 长键前缀匹配（≥30 字符）
@@ -701,15 +701,6 @@ static NSString *ZH_specname_imp(id self, SEL _cmd) {
     return o;
 }
 
-static id ZH_setprop_imp(id self, SEL _cmd, id value, NSString *key) {
-    @try {
-        if ([value isKindOfClass:[NSString class]] && [key isKindOfClass:[NSString class]]) {
-            NSString *t = ZH_prefsTr(value);
-            if (t) value = t;
-        }
-    } @catch (id e) {}
-    return ((id(*)(id, SEL, id, NSString *))g_origSetProp)(self, _cmd, value, key);
-}
 static id ZH_getprop_imp(id self, SEL _cmd, NSString *key) {
     id v = ((id(*)(id, SEL, NSString *))g_origGetProp)(self, _cmd, key);
     @try {
@@ -737,8 +728,7 @@ static void PCZHPrefsInit(void) {
                 g_origSpecName = method_getImplementation(m);
                 method_setImplementation(m, (IMP)ZH_specname_imp);
             }
-            Method m2 = class_getInstanceMethod(pss, sel_registerName("setProperty:forKey:"));
-            if (m2 && !g_origSetProp) { g_origSetProp = method_getImplementation(m2); method_setImplementation(m2, (IMP)ZH_setprop_imp); }
+
             Method m3 = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
             if (m3 && !g_origGetProp) { g_origGetProp = method_getImplementation(m3); method_setImplementation(m3, (IMP)ZH_getprop_imp); }
             NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
@@ -988,7 +978,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.42\n"];
+            [report appendString:@"step=done v0.4.43\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
