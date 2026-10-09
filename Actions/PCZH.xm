@@ -382,8 +382,6 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
 }
 
 #pragma mark - SpringBoard 稳定性层 + 关闭Siri 修复（0.5.3）
-static IMP g_goHomeOrig = NULL;
-static Class g_goHomeCls = nil;
 static void ZHSBLog(NSString *line) {
     @try {
         NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/pczh76_sb.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
