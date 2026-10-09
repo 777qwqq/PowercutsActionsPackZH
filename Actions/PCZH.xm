@@ -394,15 +394,8 @@ static void PCZHPrefsInit(void) {
         }
         Class pcsp = objc_getClass("PCSPrefsListController");
         if (pcsp) {
-            Method ml2 = class_getInstanceMethod(pcsp, sel_registerName("loadSpecifiers"));
-            if (ml2 && !g_origLoadSpecs2) { g_origLoadSpecs2 = method_getImplementation(ml2); method_setImplementation(ml2, (IMP)ZH_loadspecs2_imp); }
             Method ms2 = class_getInstanceMethod(pcsp, sel_registerName("setSpecifiers:"));
             if (ms2 && !g_origSetSpecs2) { g_origSetSpecs2 = method_getImplementation(ms2); method_setImplementation(ms2, (IMP)ZH_setspecs2_imp); }
-        }
-        Class vc = objc_getClass("UIViewController");
-        if (vc) {
-            Method mv = class_getInstanceMethod(vc, sel_registerName("viewWillAppear:"));
-            if (mv && !g_origVWA) { g_origVWA = method_getImplementation(mv); method_setImplementation(mv, (IMP)ZH_vwa_imp); }
         }
 
     } @catch (id e) {}
