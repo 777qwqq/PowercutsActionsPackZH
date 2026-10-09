@@ -151,7 +151,7 @@ static NSString *ZH_tplname_imp(id self, SEL _cmd) {
                     tl++;
                     NSMutableString *lg = nil;
                     [lg appendFormat:@"%@ | %@\n", NSStringFromClass([self class]), tr[@"n"]];
-                    if (lg) [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh60_tplhits.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                    if (lg) [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh69_pca.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 }
                 return tr[@"n"];
             }
@@ -651,14 +651,24 @@ static void PCZHPlistDump(void) {
         if (lg.length > 100) return;
         NSFileManager *fm = [NSFileManager defaultManager];
         int dumped = 0;
-        NSArray *roots = @[@"/var/jb/Library", @"/var/jb/usr/share", @"/var/jb/Applications", @"/Applications"];
+        NSData *n1 = [@"Respring" dataUsingEncoding:NSUTF8StringEncoding];
+        NSData *n2 = [@"HOW IT WORKS" dataUsingEncoding:NSUTF8StringEncoding];
+        NSData *n3 = [@"Automation notifications" dataUsingEncoding:NSUTF8StringEncoding];
+        NSArray *roots = @[@"/var/jb/Library/PreferenceLoaders", @"/var/jb/Library/PreferenceBundles", @"/var/jb/usr/share", @"/var/jb/Library/Application Support"];
         for (NSString *root in roots) {
             if (dumped >= 4) break;
             NSArray *paths = [fm subpathsOfDirectoryAtPath:root error:nil] ?: @[];
             for (NSString *rel in paths) {
                 if (dumped >= 4) break;
-                if (![rel.lowercaseString containsString:@"powercuts"]) continue;
                 if (![rel hasSuffix:@".plist"] && ![rel hasSuffix:@".strings"]) continue;
+                NSString *full = [root stringByAppendingPathComponent:rel];
+                NSDictionary *st = [fm attributesOfItemAtPath:full error:nil];
+                if (!st || [st fileSize] > 300000) continue;
+                NSData *data = [NSData dataWithContentsOfFile:full];
+                if (!data) continue;
+                if ([data rangeOfData:n1 options:0 range:NSMakeRange(0, data.length)].location == NSNotFound &&
+                    [data rangeOfData:n2 options:0 range:NSMakeRange(0, data.length)].location == NSNotFound &&
+                    [data rangeOfData:n3 options:0 range:NSMakeRange(0, data.length)].location == NSNotFound) continue;
                 NSString *full = [root stringByAppendingPathComponent:rel];
                 NSDictionary *st = [fm attributesOfItemAtPath:full error:nil];
                 if (!st || [st fileSize] > 300000) continue;
@@ -702,17 +712,54 @@ static void PCZHPlistDump(void) {
     } @catch (id e) {}
 }
 
+static IMP g_origLoadSpecs = NULL, g_origPresent = NULL;
+static void ZH_present_imp(id self, SEL _cmd, UIViewController *vc, BOOL animated, id completion) {
+    @try {
+        static int pv = 0;
+        if (pv < 30) { pv++;
+            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+            [lg appendFormat:@"present cls=%@ title=%@\n", NSStringFromClass([vc class]), ([vc valueForKey:@"title"] ?: @"")];
+            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+    } @catch (id e) {}
+    ((void(*)(id, SEL, id, BOOL, id))g_origPresent)(self, _cmd, vc, animated, completion);
+}
+static id ZH_loadspecs_imp(id self, SEL _cmd) {
+    @try {
+        static int ls = 0;
+        if (ls < 20) { ls++;
+            NSString *file = nil, *url = nil;
+            @try { file = [self valueForKey:@"file"]; } @catch (id e) {}
+            @try { url = [[self valueForKey:@"specifiersURL"] description]; } @catch (id e) {}
+            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+            [lg appendFormat:@"loadSpec cls=%@ file=%@ url=%@\n", NSStringFromClass([self class]), file, url];
+            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+    } @catch (id e) {}
+    return ((id(*)(id, SEL))g_origLoadSpecs)(self, _cmd);
+}
+
 static void PCZHPrefsInit(void) {
     @try {
         PCZHPlistDump();
         Class nvc = objc_getClass("UINavigationController");
         if (nvc) {
             Method mp = class_getInstanceMethod(nvc, sel_registerName("pushViewController:animated:"));
-            if (mp && !g_origPush) {
-                g_origPush = method_getImplementation(mp);
-                method_setImplementation(mp, (IMP)ZH_push_imp);
+            if (mp && !g_origPush) { g_origPush = method_getImplementation(mp); method_setImplementation(mp, (IMP)ZH_push_imp); }
+        }
+        Class vc = objc_getClass("UIViewController");
+        if (vc) {
+            Method mv = class_getInstanceMethod(vc, sel_registerName("presentViewController:animated:completion:"));
+            if (mv && !g_origPresent) { g_origPresent = method_getImplementation(mv); method_setImplementation(mv, (IMP)ZH_present_imp); }
+        }
+        Class plc = objc_getClass("PSListController");
+        if (plc) {
+            Method ml = class_getInstanceMethod(plc, sel_registerName("loadSpecifiers"));
+            if (ml && !g_origLoadSpecs) {
+                g_origLoadSpecs = method_getImplementation(ml);
+                method_setImplementation(ml, (IMP)ZH_loadspecs_imp);
                 NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendString:@"== nav push hooked ==\n"];
+                [lg appendString:@"== nav/present/loadSpecifiers hooked ==\n"];
                 [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
         }
@@ -725,17 +772,17 @@ static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
         if ([procName isEqualToString:@"Preferences"] || [procName isEqualToString:@"Powercuts"]) {
             PCZHPrefsInit();
             [report appendString:@"prefs-init done\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         @try {
@@ -753,10 +800,10 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {
             [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         @try {
             Class wfr = objc_getClass("WFActionRegistry");
@@ -963,7 +1010,7 @@ static void PCZHDelayedInit(void) {
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh74_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
