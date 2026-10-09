@@ -669,11 +669,6 @@ static void PCZHPlistDump(void) {
                 if ([data rangeOfData:n1 options:0 range:NSMakeRange(0, data.length)].location == NSNotFound &&
                     [data rangeOfData:n2 options:0 range:NSMakeRange(0, data.length)].location == NSNotFound &&
                     [data rangeOfData:n3 options:0 range:NSMakeRange(0, data.length)].location == NSNotFound) continue;
-                NSString *full = [root stringByAppendingPathComponent:rel];
-                NSDictionary *st = [fm attributesOfItemAtPath:full error:nil];
-                if (!st || [st fileSize] > 300000) continue;
-                NSData *data = [NSData dataWithContentsOfFile:full];
-                if (!data) continue;
                 id obj = [NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:nil];
                 NSString *text = obj ? [obj description] : [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"" description];
                 if (text.length > 6000) text = [text substringToIndex:6000];
@@ -713,7 +708,7 @@ static void PCZHPlistDump(void) {
 }
 
 static IMP g_origLoadSpecs = NULL, g_origPresent = NULL;
-static void ZH_present_imp(id self, SEL _cmd, UIViewController *vc, BOOL animated, id completion) {
+static void ZH_present_imp(id self, SEL _cmd, id vc, BOOL animated, id completion) {
     @try {
         static int pv = 0;
         if (pv < 30) { pv++;
