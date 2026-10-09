@@ -629,6 +629,53 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
     return ((NSString *(*)(id, SEL))g_origSumLocTitle)(self, _cmd);
 }
 
+// 0.4.40：设置页（Preferences 进程）—— PSSpecifier 拦截 + 全量 dump
+static IMP g_origSpecName = NULL;
+static NSDictionary *g_prefsTr = nil;
+
+static NSString *ZH_specname_imp(id self, SEL _cmd) {
+    NSString *o = nil;
+    @try { o = ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd); } @catch (id e) { return nil; }
+    @try {
+        if (o.length) {
+            id t = g_prefsTr[o];
+            if ([t isKindOfClass:[NSString class]]) return t;
+            static int sn = 0;
+            if (sn < 80) { sn++;
+                id ident = nil;
+                @try { ident = [self valueForKey:@"identifier"]; } @catch (id e) {}
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                [lg appendFormat:@"name=%@ | ident=%@\n", o, ident];
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            }
+        }
+    } @catch (id e) {}
+    return o;
+}
+
+static void PCZHPrefsInit(void) {
+    @try {
+        // prefs 表：table.json 的 prefs 分区（英文原文 → 中文）
+        @try {
+            NSString *tp = @"/var/jb/usr/share/pczh/table.json";
+            NSDictionary *t = [NSDictionary dictionaryWithContentsOfFile:tp] ?: ({ NSData *td = [NSData dataWithContentsOfFile:tp]; td ? [NSJSONSerialization JSONObjectWithData:td options:0 error:nil] : nil; });
+            id p = t[@"prefs"];
+            if ([p isKindOfClass:[NSDictionary class]]) g_prefsTr = p;
+        } @catch (id e) {}
+        Class pss = objc_getClass("PSSpecifier");
+        if (pss) {
+            Method m = class_getInstanceMethod(pss, sel_registerName("name"));
+            if (m && !g_origSpecName) {
+                g_origSpecName = method_getImplementation(m);
+                method_setImplementation(m, (IMP)ZH_specname_imp);
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                [lg appendString:@"== PSSpecifier name hooked ==\n"];
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            }
+        }
+    } @catch (id e) {}
+}
+
 static void PCZHDelayedInit(void) {
         NSMutableString *report = [NSMutableString string];
         NSString *procName = [NSProcessInfo processInfo].processName;
@@ -637,6 +684,12 @@ static void PCZHDelayedInit(void) {
             [report appendFormat:@"proc=%@ step=entry\n", procName];
             [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
+        if ([procName isEqualToString:@"Preferences"]) {
+            PCZHPrefsInit();
+            [report appendString:@"prefs-init done\n"];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            return;
+        }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
             [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
@@ -863,7 +916,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.39\n"];
+            [report appendString:@"step=done v0.4.40\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }

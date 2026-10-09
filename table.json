@@ -222,5 +222,6 @@
   "Hide top progress banner": "隐藏顶部进度横幅",
   "Respring": "注销",
   "Enabled (respring required)": "启用（需注销）"
- }
+ },
+ "prefs": {}
 }
