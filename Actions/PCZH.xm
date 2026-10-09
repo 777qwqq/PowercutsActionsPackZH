@@ -421,6 +421,18 @@ static void PCZHPrefsInit(void) {
     } @catch (id e) {}
 }
 
+#pragma mark - 显示层翻译（UILabel setText，g_lab 精确匹配）
+static IMP g_origSetText = NULL;
+static void ZH_settext_imp(id self, SEL _cmd, NSString *text) {
+    @try {
+        if ([text isKindOfClass:[NSString class]] && text.length > 1 && text.length < 40) {
+            NSString *m = g_lab[text];
+            if ([m isKindOfClass:[NSString class]]) text = m;
+        }
+    } @catch (id e) {}
+    ((void(*)(id, SEL, NSString *))g_origSetText)(self, _cmd, text);
+}
+
 static void PCZHDelayedInit(void) {
     NSString *procName = [NSProcessInfo processInfo].processName;
     @try {
