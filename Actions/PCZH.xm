@@ -381,104 +381,7 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
-#pragma mark - SpringBoard 稳定性层 + 关闭Siri 修复（0.5.3）
-static void ZHSBLog(NSString *line) {
-    @try {
-        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:@"/var/mobile/pczh76_sb.txt" encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-        [lg appendString:line];
-        [lg writeToFile:@"/var/mobile/pczh76_sb.txt" atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    } @catch (id e) {}
-}
-// 关闭Siri 的 iOS 16.3 可用实现（级联回退）
-static void ZHSBDismissSiri(void) {
-    Class sac = objc_getClass("SBAssistantController");
-    if (!sac) { ZHSBLog(@"[关闭Siri] SBAssistantController 不存在\n"); return; }
-    id inst = nil;
-    @try { inst = ((id(*)(id, SEL))objc_msgSend)(sac, sel_registerName("sharedInstance")); } @catch (id e) {}
-    if (!inst) { ZHSBLog(@"[关闭Siri] sharedInstance 为空\n"); return; }
-    // 1) currentSession 会话对象（只读探测，安全）
-    @try {
-        SEL gs = sel_registerName("currentSession");
-        if ([inst respondsToSelector:gs]) {
-            id sess = ((id(*)(id, SEL))objc_msgSend)(inst, gs);
-            if (sess) {
-                unsigned int mc2 = 0;
-                Method *ml2 = class_copyMethodList(object_getClass(sess), &mc2);
-                NSMutableString *ms2 = [NSMutableString stringWithFormat:@"[currentSession %@ 方法 %u]:", NSStringFromClass([sess class]), mc2];
-                for (unsigned int x = 0; x < mc2 && x < 80; x++) [ms2 appendFormat:@" %s;", sel_getName(method_getName(ml2[x]))];
-                if (ml2) free(ml2);
-                ZHSBLog(ms2); ZHSBLog(@"\n");
-                // 会话对象上的同步关闭候选
-                for (NSString *sn in @[@"dismiss", @"cancel", @"close", @"dismissAnimated:", @"endSession"]) {
-                    @try {
-                        SEL ss = sel_registerName(sn.UTF8String);
-                        if ([sess respondsToSelector:ss]) {
-                            if ([sn hasSuffix:@":"]) ((void(*)(id, SEL, BOOL))objc_msgSend)(sess, ss, NO);
-                            else ((void(*)(id, SEL))objc_msgSend)(sess, ss);
-                            ZHSBLog([NSString stringWithFormat:@"[关闭Siri] session %@ 调用完成\n", sn]);
-                        }
-                    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] session %@ 异常: %@\n", sn, e]); }
-                }
-            } else ZHSBLog(@"[currentSession] 为空\n");
-        }
-    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] session 探测异常: %@\n", e]); }
-    // 2) 同步可见性关闭（_setVisible 是同步 setter）
-    @try {
-        SEL sv = sel_registerName("_setVisible:");
-        if ([inst respondsToSelector:sv]) {
-            ((void(*)(id, SEL, BOOL))objc_msgSend)(inst, sv, NO);
-            ZHSBLog(@"[关闭Siri] _setVisible:NO 完成\n");
-        }
-    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] _setVisible 异常: %@\n", e]); }
-    // 3) AX 通道（上轮验证无害）
-    @try {
-        SEL setFlag = sel_registerName("_axSetSiriDismissalIsForAssistiveTouch:");
-        if ([inst respondsToSelector:setFlag]) ((void(*)(id, SEL, BOOL))objc_msgSend)(inst, setFlag, YES);
-        SEL sched = sel_registerName("_axScheduleDismissSiriForAssistiveTouch");
-        if ([inst respondsToSelector:sched]) {
-            ((void(*)(id, SEL))objc_msgSend)(inst, sched);
-            ZHSBLog(@"[关闭Siri] AX 调度完成\n");
-        }
-    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] AX 异常: %@\n", e]); }
-    ZHSBLog(@"[关闭Siri] 全部候选失败\n");
-}
-static void ZHSBWrapAndLog(NSString *ident, NSException *e) {
-    ZHSBLog([NSString stringWithFormat:@"[捕获] ident=%@ 异常=%@\n", ident, e]);
-    if ([ident isKindOfClass:[NSString class]] && [ident containsString:@"dismissSiri"]) ZHSBDismissSiri();
-}
-// 三种 perform 签名的包装器（逐类捕获原始 IMP）
-static void ZHSBHookClass(Class cls, NSString *name) {
-    // 1 参
-    Method m1 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:"));
-    if (m1) {
-        IMP orig = method_getImplementation(m1);
-        id blk = ^(id slf, id ident) {
-            @try { return ((id(*)(id, SEL, id))orig)(slf, sel_registerName("performActionForIdentifier:"), ident); }
-            @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
-        };
-        method_setImplementation(m1, imp_implementationWithBlock(blk));
-    }
-    // 2 参
-    Method m2 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:"));
-    if (m2) {
-        IMP orig = method_getImplementation(m2);
-        id blk = ^(id slf, id ident, id params) {
-            @try { return ((id(*)(id, SEL, id, id))orig)(slf, sel_registerName("performActionForIdentifier:withParameters:"), ident, params); }
-            @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
-        };
-        method_setImplementation(m2, imp_implementationWithBlock(blk));
-    }
-    // 4 参
-    Method m4 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:success:fail:"));
-    if (m4) {
-        IMP orig = method_getImplementation(m4);
-        id blk = ^(id slf, id ident, id params, id success, id fail) {
-            @try { return ((id(*)(id, SEL, id, id, id, id))orig)(slf, sel_registerName("performActionForIdentifier:withParameters:success:fail:"), ident, params, success, fail); }
-            @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
-        };
-        method_setImplementation(m4, imp_implementationWithBlock(blk));
-    }
-}
+#pragma mark - SpringBoard 稳定性层 + 关闭Siri 修复（0.6.0 正式版，无日志）
 // Powercuts 调用的缺失方法补到 SBAssistantController 上（转发给会话对象，原代码跑通+正常报成功）
 static void ZHSBAddMissingMethod(void) {
     Class sac = objc_getClass("SBAssistantController");
@@ -494,18 +397,43 @@ static void ZHSBAddMissingMethod(void) {
             SEL ds = sel_registerName("dismissAssistantViewIfNecessaryWithAnimation:completion:");
             if ([sess respondsToSelector:ds]) {
                 ((void(*)(id, SEL, BOOL, id))objc_msgSend)(sess, ds, anim, nil);
-                ZHSBLog(@"[补方法] session dismissAssistantViewIfNecessaryWithAnimation:completion ✓\n");
                 return;
             }
             SEL sv = sel_registerName("setVisible:");
-            if ([sess respondsToSelector:sv]) {
-                ((void(*)(id, SEL, BOOL))objc_msgSend)(sess, sv, NO);
-                ZHSBLog(@"[补方法] session setVisible:NO ✓\n");
-            }
-        } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[补方法] 异常: %@\n", e]); }
+            if ([sess respondsToSelector:sv]) ((void(*)(id, SEL, BOOL))objc_msgSend)(sess, sv, NO);
+        } @catch (id e) {}
     };
     class_addMethod(sac, miss, imp_implementationWithBlock(blk), "v@B");
-    ZHSBLog(@"[补方法] dismissAssistantViewIfNecessaryWithAnimation: 已挂到 SBAssistantController\n");
+}
+// 三种 perform 签名的异常包装器（动作失败不崩桌面）
+static void ZHSBHookClass(Class cls) {
+    Method m1 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:"));
+    if (m1) {
+        IMP orig = method_getImplementation(m1);
+        id blk = ^(id slf, id ident) {
+            @try { return ((id(*)(id, SEL, id))orig)(slf, sel_registerName("performActionForIdentifier:"), ident); }
+            @catch (NSException *e) { return (id)nil; }
+        };
+        method_setImplementation(m1, imp_implementationWithBlock(blk));
+    }
+    Method m2 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:"));
+    if (m2) {
+        IMP orig = method_getImplementation(m2);
+        id blk = ^(id slf, id ident, id params) {
+            @try { return ((id(*)(id, SEL, id, id))orig)(slf, sel_registerName("performActionForIdentifier:withParameters:"), ident, params); }
+            @catch (NSException *e) { return (id)nil; }
+        };
+        method_setImplementation(m2, imp_implementationWithBlock(blk));
+    }
+    Method m4 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:success:fail:"));
+    if (m4) {
+        IMP orig = method_getImplementation(m4);
+        id blk = ^(id slf, id ident, id params, id success, id fail) {
+            @try { return ((id(*)(id, SEL, id, id, id, id))orig)(slf, sel_registerName("performActionForIdentifier:withParameters:success:fail:"), ident, params, success, fail); }
+            @catch (NSException *e) { return (id)nil; }
+        };
+        method_setImplementation(m4, imp_implementationWithBlock(blk));
+    }
 }
 static void PCZHSBInit(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -515,35 +443,19 @@ static void PCZHSBInit(void) {
                 const char *n = _dyld_get_image_name(i);
                 if (n && strstr(n, "PowercutsActionsPack.dylib")) { img = n; break; }
             }
-            if (!img) { ZHSBLog(@"PowercutsActionsPack 镜像未找到\n"); return; }
+            if (!img) return;
+            ZHSBAddMissingMethod();
             unsigned int count = 0;
             const char **names = objc_copyClassNamesForImage(img, &count);
-            int hooked = 0;
             for (unsigned int i = 0; i < count; i++) {
                 Class cls = objc_getClass(names[i]);
                 if (!cls) continue;
-                NSString *nm = [NSString stringWithUTF8String:names[i]];
-                BOOL isDismiss = [nm.lowercaseString containsString:@"siri"];
-                // 只包装 perform 重载的类（全部包装会拖慢无关类）
                 if (class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:")) ||
                     class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:")) ||
                     class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:success:fail:"))) {
-                    ZHSBHookClass(cls, nm);
-                    hooked++;
-                    if (isDismiss) ZHSBLog([NSString stringWithFormat:@"[Siri 类] %@\n", nm]);
+                    ZHSBHookClass(cls);
                 }
             }
-            Class sac = objc_getClass("SBAssistantController");
-            if (sac) {
-                unsigned int mc = 0;
-                Method *ml = class_copyMethodList(sac, &mc);
-                NSMutableString *ms = [NSMutableString stringWithFormat:@"[SBAssistantController 方法 %u]:", mc];
-                for (unsigned int x = 0; x < mc && x < 60; x++) [ms appendFormat:@" %s;", sel_getName(method_getName(ml[x]))];
-                if (ml) free(ml);
-                ZHSBLog(ms); ZHSBLog(@"\n");
-            } else { ZHSBLog(@"[SBAssistantController] 类不存在\n"); }
-            ZHSBAddMissingMethod();
-            ZHSBLog([NSString stringWithFormat:@"== SB 稳定性层就绪: 类 %u, hook %d ==\n", count, hooked]);
         } @catch (id e) {}
     });
 }
