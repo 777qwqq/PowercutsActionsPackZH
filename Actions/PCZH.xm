@@ -303,33 +303,29 @@ static id ZH_cacheget_imp(id self, SEL _cmd) {
 
 #pragma mark - 设置页探针（Preferences/Powercuts 进程）
 
-static IMP g_origPush = NULL, g_origPresent = NULL, g_origLoadSpecs = NULL;
+static IMP g_origLoadSpecs = NULL, g_origLoadSpecs2 = NULL, g_origVWA = NULL;
 static void ZHLG(NSString *line) {
     NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
     [lg appendString:line];
     [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
-static void ZH_push_imp(id self, SEL _cmd, id vc, BOOL animated) {
+static void ZH_vwa_imp(id self, SEL _cmd, BOOL animated) {
     @try {
-        static int nv = 0;
-        if (nv < 30) { nv++;
+        static int vw = 0;
+        if (vw < 40) { vw++;
             NSString *t = nil;
-            @try { t = [vc valueForKey:@"title"]; } @catch (id e) {}
-            ZHLG([NSString stringWithFormat:@"push cls=%@ title=%@\n", NSStringFromClass([vc class]), t]);
+            @try { t = [self valueForKey:@"title"]; } @catch (id e) {}
+            ZHLG([NSString stringWithFormat:@"appear cls=%@ title=%@\n", NSStringFromClass([self class]), t]);
         }
     } @catch (id e) {}
-    ((void(*)(id, SEL, id, BOOL))g_origPush)(self, _cmd, vc, animated);
+    ((void(*)(id, SEL, BOOL))g_origVWA)(self, _cmd, animated);
 }
-static void ZH_present_imp(id self, SEL _cmd, id vc, BOOL animated, id completion) {
+static id ZH_loadspecs2_imp(id self, SEL _cmd) {
     @try {
-        static int pv = 0;
-        if (pv < 30) { pv++;
-            NSString *t = nil;
-            @try { t = [vc valueForKey:@"title"]; } @catch (id e) {}
-            ZHLG([NSString stringWithFormat:@"present cls=%@ title=%@\n", NSStringFromClass([vc class]), t]);
-        }
+        static int ls2 = 0;
+        if (ls2 < 10) { ls2++; ZHLG([NSString stringWithFormat:@"loadSpec2 cls=%@\n", NSStringFromClass([self class])]); }
     } @catch (id e) {}
-    ((void(*)(id, SEL, id, BOOL, id))g_origPresent)(self, _cmd, vc, animated, completion);
+    return ((id(*)(id, SEL))g_origLoadSpecs2)(self, _cmd);
 }
 static id ZH_loadspecs_imp(id self, SEL _cmd) {
     @try {
@@ -346,15 +342,15 @@ static id ZH_loadspecs_imp(id self, SEL _cmd) {
 
 static void PCZHPrefsInit(void) {
     @try {
-        Class nvc = objc_getClass("UINavigationController");
-        if (nvc) {
-            Method mp = class_getInstanceMethod(nvc, sel_registerName("pushViewController:animated:"));
-            if (mp && !g_origPush) { g_origPush = method_getImplementation(mp); method_setImplementation(mp, (IMP)ZH_push_imp); }
-        }
         Class vc = objc_getClass("UIViewController");
         if (vc) {
-            Method mv = class_getInstanceMethod(vc, sel_registerName("presentViewController:animated:completion:"));
-            if (mv && !g_origPresent) { g_origPresent = method_getImplementation(mv); method_setImplementation(mv, (IMP)ZH_present_imp); }
+            Method mv = class_getInstanceMethod(vc, sel_registerName("viewWillAppear:"));
+            if (mv && !g_origVWA) { g_origVWA = method_getImplementation(mv); method_setImplementation(mv, (IMP)ZH_vwa_imp); }
+        }
+        Class pui = objc_getClass("PSUIPrefsListController");
+        if (pui) {
+            Method mp2 = class_getInstanceMethod(pui, sel_registerName("loadSpecifiers"));
+            if (mp2 && !g_origLoadSpecs2) { g_origLoadSpecs2 = method_getImplementation(mp2); method_setImplementation(mp2, (IMP)ZH_loadspecs2_imp); }
         }
         Class plc = objc_getClass("PSListController");
         if (plc) {
@@ -425,7 +421,7 @@ static void PCZHDelayedInit(void) {
                 } else if (!cm) [report appendFormat:@"%s NOT found\n", pcsels[pi]];
             }
         } else [report appendString:@"PCAction nil\n"];
-        [report appendString:@"step=done v0.4.49\n"];
+        [report appendString:@"step=done v0.4.50\n"];
     } @catch (id e) {
         [report appendFormat:@"hooks CRASHED: %@\n", e];
     }
