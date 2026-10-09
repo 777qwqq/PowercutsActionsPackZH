@@ -479,6 +479,34 @@ static void ZHSBHookClass(Class cls, NSString *name) {
         method_setImplementation(m4, imp_implementationWithBlock(blk));
     }
 }
+// Powercuts 调用的缺失方法补到 SBAssistantController 上（转发给会话对象，原代码跑通+正常报成功）
+static void ZHSBAddMissingMethod(void) {
+    Class sac = objc_getClass("SBAssistantController");
+    if (!sac) return;
+    SEL miss = sel_registerName("dismissAssistantViewIfNecessaryWithAnimation:");
+    if (class_getInstanceMethod(sac, miss)) return;
+    id blk = ^(id slf, BOOL anim) {
+        @try {
+            SEL gs = sel_registerName("currentSession");
+            if (![slf respondsToSelector:gs]) return;
+            id sess = ((id(*)(id, SEL))objc_msgSend)(slf, gs);
+            if (!sess) return;
+            SEL ds = sel_registerName("dismissAssistantViewIfNecessaryWithAnimation:completion:");
+            if ([sess respondsToSelector:ds]) {
+                ((void(*)(id, SEL, BOOL, id))objc_msgSend)(sess, ds, anim, nil);
+                ZHSBLog(@"[补方法] session dismissAssistantViewIfNecessaryWithAnimation:completion ✓\n");
+                return;
+            }
+            SEL sv = sel_registerName("setVisible:");
+            if ([sess respondsToSelector:sv]) {
+                ((void(*)(id, SEL, BOOL))objc_msgSend)(sess, sv, NO);
+                ZHSBLog(@"[补方法] session setVisible:NO ✓\n");
+            }
+        } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[补方法] 异常: %@\n", e]); }
+    };
+    class_addMethod(sac, miss, imp_implementationWithBlock(blk), "v@B");
+    ZHSBLog(@"[补方法] dismissAssistantViewIfNecessaryWithAnimation: 已挂到 SBAssistantController\n");
+}
 static void PCZHSBInit(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         @try {
@@ -514,6 +542,7 @@ static void PCZHSBInit(void) {
                 if (ml) free(ml);
                 ZHSBLog(ms); ZHSBLog(@"\n");
             } else { ZHSBLog(@"[SBAssistantController] 类不存在\n"); }
+            ZHSBAddMissingMethod();
             ZHSBLog([NSString stringWithFormat:@"== SB 稳定性层就绪: 类 %u, hook %d ==\n", count, hooked]);
         } @catch (id e) {}
     });
