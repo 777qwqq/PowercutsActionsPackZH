@@ -384,6 +384,104 @@ static int ZHScanDir(NSMutableString *report, NSString *dir, int depth, int *hit
 
 
 
+static BOOL g_cacheTrDone = NO;
+// 0.4.39：缓存层深度翻译（画布直接读 registeredCustomActionsCachedData 的最后可能）
+static IMP g_origCacheGet = NULL, g_origCacheSet = NULL;
+
+static void ZHDeepTr(NSMutableDictionary *def, NSDictionary *tr) {
+    if (!tr) return;
+    for (NSString *k in [def copy]) {
+        id v = def[k];
+        if ([v isKindOfClass:[NSMutableDictionary class]] || [v isKindOfClass:[NSDictionary class]]) {
+            NSMutableDictionary *vd = [(NSDictionary *)v mutableCopy];
+            ZHDeepTr(vd, tr);
+            def[k] = vd;
+        } else if ([v isKindOfClass:[NSMutableArray class]] || [v isKindOfClass:[NSArray class]]) {
+            NSMutableArray *na = [NSMutableArray array];
+            for (id it in (NSArray *)v) {
+                if ([it isKindOfClass:[NSDictionary class]]) {
+                    NSMutableDictionary *nit = [(NSDictionary *)it mutableCopy];
+                    ZHDeepTr(nit, tr);
+                    [na addObject:nit];
+                } else [na addObject:it];
+            }
+            def[k] = na;
+        } else if ([v isKindOfClass:[NSString class]]) {
+            if ([k isEqualToString:@"ActionName"] && tr[@"n"]) { def[k] = tr[@"n"]; continue; }
+            if ([k isEqualToString:@"ActionDescriptionSummary"] && tr[@"d"]) { def[k] = tr[@"d"]; continue; }
+            if ([k isEqualToString:@"ActionDescription"] && tr[@"d"]) { def[k] = tr[@"d"]; continue; }
+            if ([k rangeOfString:@"ummary"].location != NSNotFound && tr[@"s"]) { def[k] = tr[@"s"]; continue; }
+            if ([k isEqualToString:@"Label"] || [k isEqualToString:@"Placeholder"]) {
+                id t = g_lab[v];
+                if (t) def[k] = t;
+            }
+        }
+    }
+}
+
+static id ZHCacheTr(NSDictionary *raw) {
+    if ([raw isKindOfClass:[NSDictionary class]]) {
+        NSMutableDictionary *out = [(NSDictionary *)raw mutableCopy];
+        for (NSString *k in [out copy]) {
+            id v = out[k];
+            if ([k hasPrefix:@"com.anthopak.powercuts"] && [v isKindOfClass:[NSDictionary class]]) {
+                NSMutableDictionary *vd = [(NSDictionary *)v mutableCopy];
+                ZHDeepTr(vd, ZHTr(k));
+                out[k] = vd;
+            } else if ([v isKindOfClass:[NSDictionary class]]) {
+                NSMutableDictionary *vd = [(NSDictionary *)v mutableCopy];
+                id aid = vd[@"ActionIdentifier"] ?: vd[@"Identifier"];
+                if ([aid isKindOfClass:[NSString class]]) { ZHDeepTr(vd, ZHTr(aid)); out[k] = vd; }
+            } else if ([v isKindOfClass:[NSArray class]]) {
+                NSMutableArray *na = [NSMutableArray array];
+                for (id it in (NSArray *)v) {
+                    if ([it isKindOfClass:[NSDictionary class]]) {
+                        NSMutableDictionary *nit = [(NSDictionary *)it mutableCopy];
+                        id aid = nit[@"ActionIdentifier"] ?: [k isKindOfClass:[NSString class]] ? k : nil;
+                        id tr = ZHTr([aid isKindOfClass:[NSString class]] ? aid : @"");
+                        if (!tr && [nit isKindOfClass:[NSDictionary class]]) {
+                            id an = nit[@"ActionName"];
+                            if ([an isKindOfClass:[NSString class]]) {
+                                for (NSString *ik in g_tr) { if ([g_tr[ik][@"n"] isEqualToString:an]) { tr = g_tr[ik]; break; } }
+                            }
+                        }
+                        ZHDeepTr(nit, tr);
+                        [na addObject:nit];
+                    } else [na addObject:it];
+                }
+                out[k] = na;
+            }
+        }
+        return out;
+    }
+    return raw;
+}
+
+static id ZH_cacheget_imp(id self, SEL _cmd) {
+    id orig = ((id(*)(id, SEL))g_origCacheGet)(self, _cmd);
+    @try {
+        if (orig && !g_cacheTrDone) {
+            g_cacheTrDone = YES;
+            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_cache.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+            [lg appendFormat:@"RAW结构:\n%@\n----\n", [orig description]];
+            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_cache.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+        id tr = ZHCacheTr(orig);
+        if (tr != orig) {
+            static int cgt = 0;
+            if (cgt < 2) { cgt++;
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_cache.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                [lg appendFormat:@"GET 已翻译 (第%d次)\n----\n", cgt];
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_cache.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            }
+        }
+        return tr;
+    } @catch (id e) { return orig; }
+}
+static void ZH_cachegetset_imp(id self, SEL _cmd, id v) {
+    @try { ((void(*)(id, SEL, id))g_origCacheSet)(self, _cmd, v); } @catch (id e) {}
+}
+
 // 0.4.38：WFAction 级显示名（画布卡标题候选源）
 static IMP g_origLN = NULL, g_origLSN = NULL;
 static void ZHLNLog(NSString *tag, NSString *cls, NSString *ident, NSString *orig) {
@@ -537,11 +635,11 @@ static void PCZHDelayedInit(void) {
         @try {
             PCZHInitTables();
             [report appendFormat:@"proc=%@ step=entry\n", procName];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh69_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
         if (![procName isEqualToString:@"Shortcuts"]) {
             [report appendString:@"skipped (not Shortcuts)\n"];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh69_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             return;
         }
         @try {
@@ -559,10 +657,10 @@ static void PCZHDelayedInit(void) {
                 }
             }
             [report appendFormat:@"scan hits=%d step=scan-done\n", hits];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh69_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) {
             [report appendFormat:@"scan CRASHED: %@\n", e];
-            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh69_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
         @try {
             Class wfr = objc_getClass("WFActionRegistry");
@@ -698,6 +796,20 @@ static void PCZHDelayedInit(void) {
                     } else if (!cm) [report appendFormat:@"%s NOT found\n", tg[hi]];
                 }
             } else [report appendString:@"WFActionRegistry nil\n"];
+                // 0.4.39：PCSharedBucketManager 缓存层
+                {
+                    Class pbm = objc_getClass("PCSharedBucketManager");
+                    if (pbm) {
+                        Method m1 = class_getInstanceMethod(pbm, sel_registerName("registeredCustomActionsCachedData"));
+                        BOOL c1 = NO;
+                        if (!m1) { m1 = class_getClassMethod(pbm, sel_registerName("registeredCustomActionsCachedData")); c1 = YES; }
+                        if (m1 && !g_origCacheGet) {
+                            g_origCacheGet = method_getImplementation(m1);
+                            method_setImplementation(m1, (IMP)ZH_cacheget_imp);
+                            [report appendFormat:@"%sregisteredCustomActionsCachedData hooked\n", c1 ? "+" : "-"];
+                        } else if (!m1) [report appendString:@"cacheGet NOT found\n"];
+                    } else [report appendString:@"PCSharedBucketManager nil\n"];
+                }
                 // 0.4.38：WFAction 级显示名 hooks
                 {
                     Class wfa = objc_getClass("WFAction");
@@ -751,11 +863,11 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.38\n"];
+            [report appendString:@"step=done v0.4.39\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
-        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh69_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 %ctor {
