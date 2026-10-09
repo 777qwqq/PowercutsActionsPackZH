@@ -396,29 +396,54 @@ static void ZHSBDismissSiri(void) {
     id inst = nil;
     @try { inst = ((id(*)(id, SEL))objc_msgSend)(sac, sel_registerName("sharedInstance")); } @catch (id e) {}
     if (!inst) { ZHSBLog(@"[关闭Siri] sharedInstance 为空\n"); return; }
-    for (NSString *selName in @[@"_axDismissSiriForAssistiveTouch", @"_axScheduleDismissSiriForAssistiveTouch"]) {
-        @try {
-            SEL ds = sel_registerName(selName.UTF8String);
-            if ([inst respondsToSelector:ds]) {
-                ((void(*)(id, SEL))objc_msgSend)(inst, ds);
-                ZHSBLog([NSString stringWithFormat:@"[关闭Siri] %@ ✓\n", selName]);
-                return;
-            } else {
-                ZHSBLog([NSString stringWithFormat:@"[关闭Siri] %@ 不响应\n", selName]);
-            }
-        } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] %@ 异常: %@\n", selName, e]); }
-    }
-    // 呈现层标准关闭回调
+    // 1) 呈现层标准关闭回调
     @try {
         SEL ds3 = sel_registerName("siriPresentation:requestsDismissalWithOptions:withHandler:");
         if ([inst respondsToSelector:ds3]) {
-            id blk = ^(__unused id result) {};
+            __block BOOL done = NO;
+            id blk = ^(__unused id res) { done = YES; };
             ((void(*)(id, SEL, id, id, id))objc_msgSend)(inst, ds3, inst, @{}, blk);
-            ZHSBLog(@"[关闭Siri] siriPresentation requestsDismissal ✓\n");
+            ZHSBLog([NSString stringWithFormat:@"[关闭Siri] requestsDismissal 调用完成 handler=%d\n", done]);
             return;
         }
         ZHSBLog(@"[关闭Siri] requestsDismissal 不响应\n");
     } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] requestsDismissal 异常: %@\n", e]); }
+    // 2) 模拟"点按 Siri 内容之外"触发的关闭
+    @try {
+        SEL ds4 = sel_registerName("siriPresentation:didUpdateShouldDismissForTapsOutsideContent:");
+        if ([inst respondsToSelector:ds4]) {
+            ((void(*)(id, SEL, id, BOOL))objc_msgSend)(inst, ds4, inst, YES);
+            ZHSBLog(@"[关闭Siri] tapsOutside 模拟完成\n");
+            return;
+        }
+        ZHSBLog(@"[关闭Siri] tapsOutside 不响应\n");
+    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] tapsOutside 异常: %@\n", e]); }
+    // 3) AX 通道带前置状态
+    @try {
+        SEL setFlag = sel_registerName("_axSetSiriDismissalIsForAssistiveTouch:");
+        if ([inst respondsToSelector:setFlag]) ((void(*)(id, SEL, BOOL))objc_msgSend)(inst, setFlag, YES);
+        SEL sched = sel_registerName("_axScheduleDismissSiriForAssistiveTouch");
+        if ([inst respondsToSelector:sched]) {
+            ((void(*)(id, SEL))objc_msgSend)(inst, sched);
+            ZHSBLog(@"[关闭Siri] AX 调度完成(带状态)\n");
+            return;
+        }
+    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] AX 异常: %@\n", e]); }
+    // 4) dump currentSession 供下轮定位
+    @try {
+        SEL gs = sel_registerName("currentSession");
+        if ([inst respondsToSelector:gs]) {
+            id sess = ((id(*)(id, SEL))objc_msgSend)(inst, gs);
+            if (sess) {
+                unsigned int mc2 = 0;
+                Method *ml2 = class_copyMethodList(object_getClass(sess), &mc2);
+                NSMutableString *ms2 = [NSMutableString stringWithFormat:@"[currentSession %@ 方法 %u]:", NSStringFromClass([sess class]), mc2];
+                for (unsigned int x = 0; x < mc2 && x < 50; x++) [ms2 appendFormat:@" %s;", sel_getName(method_getName(ml2[x]))];
+                if (ml2) free(ml2);
+                ZHSBLog(ms2); ZHSBLog(@"\n");
+            } else ZHSBLog(@"[currentSession] 为空\n");
+        }
+    } @catch (id e) {}
     ZHSBLog(@"[关闭Siri] 全部候选失败\n");
 }
 static void ZHSBWrapAndLog(NSString *ident, NSException *e) {

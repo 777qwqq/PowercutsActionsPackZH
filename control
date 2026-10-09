@@ -1,6 +1,6 @@
 Package: com.moss.pczhexecutor
 Name: Powercuts 汉化补丁
-Version: 0.5.4
+Version: 0.5.5
 Architecture: iphoneos-arm64
 Description: 扩展原生「快捷指令」实现深度自动化；插件设置界面与动作描述均已汉化
 Author: 777qwq
