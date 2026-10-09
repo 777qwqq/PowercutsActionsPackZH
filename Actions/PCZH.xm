@@ -755,8 +755,39 @@ static void ZH_setspecs_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
+static void PCZHPlistDump(void) {
+    @try {
+        NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh72_plist.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+        if (lg.length > 100) return; // 已 dump 过
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSArray *dirs = @[@"/var/jb/Library/PreferenceLoaders", @"/var/jb/Library/PreferenceBundles", @"/var/jb/Applications", @"/Applications"];
+        int dumped = 0;
+        for (NSString *dir in dirs) {
+            if (dumped >= 3) break;
+            NSArray *paths = [fm subpathsOfDirectoryAtPath:dir error:nil] ?: @[];
+            for (NSString *rel in paths) {
+                if (dumped >= 3) break;
+                if (![rel.lowercaseString containsString:@"powercuts"]) continue;
+                if (![rel hasSuffix:@".plist"] && ![rel hasSuffix:@".strings"]) continue;
+                NSString *full = [dir stringByAppendingPathComponent:rel];
+                NSDictionary *st = [fm attributesOfItemAtPath:full error:nil];
+                if (!st || [st fileSize] > 200000) continue;
+                NSData *data = [NSData dataWithContentsOfFile:full];
+                if (!data) continue;
+                id obj = [NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:nil];
+                NSString *text = obj ? [obj description] : [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"" description];
+                [lg appendFormat:@"===== %@ (%lu bytes) =====\n%@\n\n", full, (unsigned long)st.fileSize, text];
+                dumped++;
+            }
+        }
+        [lg appendFormat:@"dumped=%d\n", dumped];
+        [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh72_plist.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    } @catch (id e) {}
+}
+
 static void PCZHPrefsInit(void) {
     @try {
+        PCZHPlistDump();
         // prefs 表：table.json 的 prefs 分区（英文原文 → 中文）
         @try {
             NSString *tp = @"/var/jb/usr/share/pczh/table.json";
@@ -1026,7 +1057,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.44\n"];
+            [report appendString:@"step=done v0.4.45\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
