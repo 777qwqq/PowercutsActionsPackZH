@@ -216,6 +216,30 @@ static NSString *ZH_pcdesc_imp(id self, SEL _cmd, NSString *ident) {
     } @catch (id e) {}
     return ((NSString *(*)(id, SEL, NSString *))g_origPCDesc)(self, _cmd, ident);
 }
+static IMP g_origPCParams = NULL;
+static id ZH_pcparams_imp(id self, SEL _cmd, NSString *ident) {
+    id v = ((id(*)(id, SEL, NSString *))g_origPCParams)(self, _cmd, ident);
+    @try {
+        NSDictionary *tr = ZHTr(ident);
+        if ([v isKindOfClass:[NSDictionary class]]) {
+            NSMutableDictionary *md = [(NSDictionary *)v mutableCopy];
+            ZHDeepTr(md, tr);
+            return md;
+        }
+        if ([v isKindOfClass:[NSArray class]]) {
+            NSMutableArray *na = [NSMutableArray array];
+            for (id it in (NSArray *)v) {
+                if ([it isKindOfClass:[NSDictionary class]]) {
+                    NSMutableDictionary *nit = [(NSDictionary *)it mutableCopy];
+                    ZHDeepTr(nit, tr);
+                    [na addObject:nit];
+                } else [na addObject:it];
+            }
+            return na;
+        }
+    } @catch (id e) {}
+    return v;
+}
 static NSString *ZH_pcsum_imp(id self, SEL _cmd, NSString *ident) {
     @try {
         NSDictionary *tr = ZHTr(ident);
@@ -501,10 +525,10 @@ static void PCZHDelayedInit(void) {
 
         Class pss2 = objc_getClass("PCAction");
         if (pss2) {
-            const char *pcsels[3] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:"};
-            IMP *imps[3] = {&g_origPCName, &g_origPCDesc, &g_origPCSum};
-            IMP imps2[3] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp};
-            for (int pi = 0; pi < 3; pi++) {
+            const char *pcsels[4] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:", "parametersDefinitionForIdentifier:"};
+            IMP *imps[4] = {&g_origPCName, &g_origPCDesc, &g_origPCSum, &g_origPCParams};
+            IMP imps2[4] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp, (IMP)ZH_pcparams_imp};
+            for (int pi = 0; pi < 4; pi++) {
                 Method cm = class_getInstanceMethod(pss2, sel_registerName(pcsels[pi]));
                 BOOL isClass = NO;
                 if (!cm) { cm = class_getClassMethod(pss2, sel_registerName(pcsels[pi])); isClass = YES; }
