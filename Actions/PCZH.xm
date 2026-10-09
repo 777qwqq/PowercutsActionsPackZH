@@ -642,7 +642,7 @@ static void ZH_push_imp(id self, SEL _cmd, id vc, BOOL animated) {
             [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
     } @catch (id e) {}
-    ((void(*)(id, SEL, UIViewController*, BOOL))g_origPush)(self, _cmd, vc, animated);
+    ((void(*)(id, SEL, id, BOOL))g_origPush)(self, _cmd, vc, animated);
 }
 
 static void PCZHPlistDump(void) {
