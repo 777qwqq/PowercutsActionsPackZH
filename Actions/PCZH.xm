@@ -6,6 +6,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <notify.h>
+#import <mach-o/dyld.h>
 
 #pragma mark - 映射表
 
@@ -392,33 +393,24 @@ static void ZHSBLog(NSString *line) {
 }
 // 关闭Siri 的 iOS 16.3 可用实现（级联回退）
 static void ZHSBDismissSiri(void) {
-    // 1) SBAssistantController 私有接口
-    @try {
-        Class sac = objc_getClass("SBAssistantController");
-        if (sac) {
-            id inst = ((id(*)(id, SEL))objc_msgSend)(sac, sel_registerName("sharedInstance"));
-            if (inst) {
-                SEL ds = sel_registerName("dismissSiri");
-                if ([inst respondsToSelector:ds]) {
-                    ((void(*)(id, SEL))objc_msgSend)(inst, ds);
-                    ZHSBLog(@"[关闭Siri] SBAssistantController dismissSiri ✓\n");
-                    return;
-                }
-            }
-        }
-    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] SBAssistantController 失败: %@\n", e]); }
-    // 2) 复用 Pack 自带回主屏幕（16.3 已验证可用）
-    @try {
-        if (g_goHomeOrig && g_goHomeCls) {
-            id inst = [[g_goHomeCls alloc] init];
-            if (inst) {
-                ((void(*)(id, SEL, id, id))g_goHomeOrig)(inst, sel_registerName("performActionForIdentifier:withParameters:"), @"com.anthopak.powercuts.action.goHome", @{});
-                ZHSBLog(@"[关闭Siri] goHome 回退 ✓\n");
+    Class sac = objc_getClass("SBAssistantController");
+    if (!sac) { ZHSBLog(@"[关闭Siri] SBAssistantController 不存在\n"); return; }
+    id inst = nil;
+    @try { inst = ((id(*)(id, SEL))objc_msgSend)(sac, sel_registerName("sharedInstance")); } @catch (id e) {}
+    if (!inst) { ZHSBLog(@"[关闭Siri] sharedInstance 为空\n"); return; }
+    for (NSString *selName in @[@"dismissSiri", @"_dismissSiri", @"dismissSiriAnimated:", @"dismissAnimated:", @"dismiss"]) {
+        @try {
+            SEL ds = sel_registerName(selName.UTF8String);
+            if ([inst respondsToSelector:ds]) {
+                ((void(*)(id, SEL))objc_msgSend)(inst, ds);
+                ZHSBLog([NSString stringWithFormat:@"[关闭Siri] %@ ✓\n", selName]);
                 return;
+            } else {
+                ZHSBLog([NSString stringWithFormat:@"[关闭Siri] %@ 不响应\n", selName]);
             }
-        }
-    } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] goHome 回退失败: %@\n", e]); }
-    ZHSBLog(@"[关闭Siri] 所有回退均失败\n");
+        } @catch (id e) { ZHSBLog([NSString stringWithFormat:@"[关闭Siri] %@ 异常: %@\n", selName, e]); }
+    }
+    ZHSBLog(@"[关闭Siri] 候选选择器全部失败\n");
 }
 static void ZHSBWrapAndLog(NSString *ident, NSException *e) {
     ZHSBLog([NSString stringWithFormat:@"[捕获] ident=%@ 异常=%@\n", ident, e]);
@@ -426,13 +418,12 @@ static void ZHSBWrapAndLog(NSString *ident, NSException *e) {
 }
 // 三种 perform 签名的包装器（逐类捕获原始 IMP）
 static void ZHSBHookClass(Class cls, NSString *name) {
-    const char *sels1[1] = {"performActionForIdentifier:"};
     // 1 参
-    Method m1 = class_getInstanceMethod(cls, sel_registerName(sels1[0]));
+    Method m1 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:"));
     if (m1) {
         IMP orig = method_getImplementation(m1);
         id blk = ^(id slf, id ident) {
-            @try { return ((id(*)(id, SEL, id))orig)(slf, sel_registerName(sels1[0]), ident); }
+            @try { return ((id(*)(id, SEL, id))orig)(slf, sel_registerName("performActionForIdentifier:"), ident); }
             @catch (NSException *e) { ZHSBWrapAndLog(ident, e); return (id)nil; }
         };
         method_setImplementation(m1, imp_implementationWithBlock(blk));
@@ -474,12 +465,6 @@ static void PCZHSBInit(void) {
                 Class cls = objc_getClass(names[i]);
                 if (!cls) continue;
                 NSString *nm = [NSString stringWithUTF8String:names[i]];
-                BOOL isGoHome = [nm.lowercaseString containsString:@"gohome"];
-                BOOL isDismiss = [nm.lowercaseString containsString:@"siri"];
-                if (isGoHome) { g_goHomeCls = cls; g_goHomeOrig = NULL;
-                    Method m2 = class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:"));
-                    if (m2) g_goHomeOrig = method_getImplementation(m2);
-                }
                 // 只包装 perform 重载的类（全部包装会拖慢无关类）
                 if (class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:withParameters:")) ||
                     class_getInstanceMethod(cls, sel_registerName("performActionForIdentifier:")) ||
@@ -490,7 +475,16 @@ static void PCZHSBInit(void) {
                     if (isGoHome) ZHSBLog([NSString stringWithFormat:@"[goHome 类] %@\n", nm]);
                 }
             }
-            ZHSBLog([NSString stringWithFormat:@"== SB 稳定性层就绪: 类 %u, hook %d, goHome=%@ ==\n", count, hooked, g_goHomeCls]);
+            Class sac = objc_getClass("SBAssistantController");
+            if (sac) {
+                unsigned int mc = 0;
+                Method *ml = class_copyMethodList(sac, &mc);
+                NSMutableString *ms = [NSMutableString stringWithFormat:@"[SBAssistantController 方法 %u]:", mc];
+                for (unsigned int x = 0; x < mc && x < 60; x++) [ms appendFormat:@" %s;", sel_getName(method_getName(ml[x]))];
+                if (ml) free(ml);
+                ZHSBLog(ms); ZHSBLog(@"\n");
+            } else { ZHSBLog(@"[SBAssistantController] 类不存在\n"); }
+            ZHSBLog([NSString stringWithFormat:@"== SB 稳定性层就绪: 类 %u, hook %d ==\n", count, hooked]);
         } @catch (id e) {}
     });
 }
