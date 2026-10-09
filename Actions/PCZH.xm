@@ -405,31 +405,16 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
-#pragma mark - WFParameter 参数行标签（展开卡编辑器渲染源）
-static IMP g_origWFTitle = NULL;
-static NSString *ZH_wftitle_imp(id self, SEL _cmd) {
+#pragma mark - 显示层翻译（UILabel setText，g_lab 精确匹配）
+static IMP g_origSetText = NULL;
+static void ZH_settext_imp(id self, SEL _cmd, NSString *text) {
     @try {
-        NSString *o = ((NSString *(*)(id, SEL))g_origWFTitle)(self, _cmd);
-        if (o.length) {
-            NSString *m = g_lab[o];
-            if ([m isKindOfClass:[NSString class]]) {
-                static int wt = 0;
-                if (wt < 15) { wt++;
-                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                    [lg appendFormat:@"HIT cls=%@ orig=%@\n", NSStringFromClass([self class]), o];
-                    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                }
-                return m;
-            }
-            static int wu = 0;
-            if (wu < 15) { wu++;
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendFormat:@"MISS cls=%@ orig=%@\n", NSStringFromClass([self class]), o];
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            }
+        if ([text isKindOfClass:[NSString class]] && text.length > 1 && text.length < 40) {
+            NSString *m = g_lab[text];
+            if ([m isKindOfClass:[NSString class]]) text = m;
         }
-        return o;
-    } @catch (id e) { return ((NSString *(*)(id, SEL))g_origWFTitle)(self, _cmd); }
+    } @catch (id e) {}
+    ((void(*)(id, SEL, NSString *))g_origSetText)(self, _cmd, text);
 }
 
 #pragma mark - 设置页探针（Preferences/Powercuts 进程）
@@ -568,14 +553,14 @@ static void PCZHDelayedInit(void) {
             }
         } else [report appendString:@"PCAction nil\n"];
         {
-            Class wfp = objc_getClass("WFParameter");
-            if (wfp) {
-                Method mt = class_getInstanceMethod(wfp, sel_registerName("title"));
-                if (mt && !g_origWFTitle) { g_origWFTitle = method_getImplementation(mt); method_setImplementation(mt, (IMP)ZH_wftitle_imp); [report appendString:@"WFParameter-title hooked\n"]; }
-                else if (!mt) [report appendString:@"WFParameter-title NOT found\n"];
-            } else [report appendString:@"WFParameter nil\n"];
+            Class ul = objc_getClass("UILabel");
+            if (ul) {
+                Method us = class_getInstanceMethod(ul, sel_registerName("setText:"));
+                if (us && !g_origSetText) { g_origSetText = method_getImplementation(us); method_setImplementation(us, (IMP)ZH_settext_imp); [report appendString:@"UILabel-setText hooked\n"]; }
+                else if (!us) [report appendString:@"UILabel-setText NOT found\n"];
+            }
         }
-        [report appendString:@"step=done v0.4.54\n"];
+        [report appendString:@"step=done v0.4.55\n"];
     } @catch (id e) {
         [report appendFormat:@"hooks CRASHED: %@\n", e];
     }
