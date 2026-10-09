@@ -630,15 +630,56 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
 }
 
 // 0.4.40：设置页（Preferences 进程）—— PSSpecifier 拦截 + 全量 dump
-static IMP g_origSpecName = NULL;
+static IMP g_origSpecName = NULL, g_origSetProp = NULL, g_origGetProp = NULL;
 static NSDictionary *g_prefsTr = nil;
+
+// 长文本：精确匹配 → 长键前缀匹配（≥30 字符）
+static NSString *ZH_prefsLookup(NSString *o) {
+    if (!o.length) return nil;
+    id t = g_prefsTr[o];
+    if ([t isKindOfClass:[NSString class]]) return t;
+    if (o.length >= 30) {
+        for (NSString *k in g_prefsTr) {
+            if (k.length >= 30 && [o hasPrefix:k]) {
+                id tv = g_prefsTr[k];
+                if ([tv isKindOfClass:[NSString class]]) return tv;
+            }
+        }
+    }
+    return nil;
+}
+
+static NSString *ZH_prefsFooterFix(NSString *o) {
+    // 长注释逐行兜底（换行变体）
+    if ([o hasPrefix:@"- Disable Automation notifications:"]) {
+        NSString *en1 = @"- Disable Automation notifications: prevents notifications when automations run\n";
+        NSString *en2 = @"- Automations without confirmation: adds the ability to run automations without having to confirm, for all triggers (please note that it won't work for Mail and Message triggers)\n";
+        NSString *en3 = @"- Allow import/export Shortcuts as files: adds the ability to import/export Shortcuts as a file (.shortcuts or .wflow) instead of an iCloud link\n";
+        NSString *en4 = @"- Allow running sensitive actions unauthenticated: prevent some actions from asking to unlock your phone before running. It can be useful when using such actions in an automation which can run while locked. Does NOT work with all sensitive actions.\n";
+        NSString *en5 = @"- Hide top progress banner: hide the intrusive top progress banner which shows while running a Shortcut from an homescreen icon, from Assistive Touch, or else";
+        NSString *r = [o copy];
+        r = [r stringByReplacingOccurrencesOfString:en1 withString:@"- 禁用自动化通知：自动化运行时不再发送通知\n"];
+        r = [r stringByReplacingOccurrencesOfString:en2 withString:@"- 自动化无需确认：所有触发器均可免确认直接运行自动化（注意：邮件和信息触发器不支持）\n"];
+        r = [r stringByReplacingOccurrencesOfString:en3 withString:@"- 允许以文件形式导入/导出快捷指令：以文件（.shortcuts 或 .wflow）而非 iCloud 链接导入/导出\n"];
+        r = [r stringByReplacingOccurrencesOfString:en4 withString:@"- 允许免认证运行敏感操作：部分操作运行前不再要求解锁。适合在锁屏可运行的自动化中使用。并非对所有敏感操作生效。\n"];
+        r = [r stringByReplacingOccurrencesOfString:en5 withString:@"- 隐藏顶部进度横幅：隐藏从主屏图标、辅助触控等运行快捷指令时顶部的进度横幅"];
+        return r;
+    }
+    return nil;
+}
+
+static NSString *ZH_prefsTr(NSString *o) {
+    NSString *r = ZH_prefsLookup(o);
+    if (r) return r;
+    return ZH_prefsFooterFix(o);
+}
 
 static NSString *ZH_specname_imp(id self, SEL _cmd) {
     NSString *o = nil;
     @try { o = ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd); } @catch (id e) { return nil; }
     @try {
         if (o.length) {
-            id t = g_prefsTr[o];
+            NSString *t = ZH_prefsTr(o);
             if ([t isKindOfClass:[NSString class]]) return t;
             BOOL hasAscii = NO;
             for (NSUInteger ci = 0; ci < o.length && !hasAscii; ci++) {
@@ -660,6 +701,26 @@ static NSString *ZH_specname_imp(id self, SEL _cmd) {
     return o;
 }
 
+static id ZH_setprop_imp(id self, SEL _cmd, id value, NSString *key) {
+    @try {
+        if ([value isKindOfClass:[NSString class]] && [key isKindOfClass:[NSString class]]) {
+            NSString *t = ZH_prefsTr(value);
+            if (t) value = t;
+        }
+    } @catch (id e) {}
+    return ((id(*)(id, SEL, id, NSString *))g_origSetProp)(self, _cmd, value, key);
+}
+static id ZH_getprop_imp(id self, SEL _cmd, NSString *key) {
+    id v = ((id(*)(id, SEL, NSString *))g_origGetProp)(self, _cmd, key);
+    @try {
+        if ([v isKindOfClass:[NSString class]] && [key isKindOfClass:[NSString class]]) {
+            NSString *t = ZH_prefsTr(v);
+            if (t) return t;
+        }
+    } @catch (id e) {}
+    return v;
+}
+
 static void PCZHPrefsInit(void) {
     @try {
         // prefs 表：table.json 的 prefs 分区（英文原文 → 中文）
@@ -675,10 +736,14 @@ static void PCZHPrefsInit(void) {
             if (m && !g_origSpecName) {
                 g_origSpecName = method_getImplementation(m);
                 method_setImplementation(m, (IMP)ZH_specname_imp);
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendString:@"== PSSpecifier name hooked ==\n"];
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
+            Method m2 = class_getInstanceMethod(pss, sel_registerName("setProperty:forKey:"));
+            if (m2 && !g_origSetProp) { g_origSetProp = method_getImplementation(m2); method_setImplementation(m2, (IMP)ZH_setprop_imp); }
+            Method m3 = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
+            if (m3 && !g_origGetProp) { g_origGetProp = method_getImplementation(m3); method_setImplementation(m3, (IMP)ZH_getprop_imp); }
+            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+            [lg appendString:@"== PSSpecifier name/setProp/getProp hooked ==\n"];
+            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
     } @catch (id e) {}
 }
@@ -923,7 +988,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.41\n"];
+            [report appendString:@"step=done v0.4.42\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }

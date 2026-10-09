@@ -223,5 +223,20 @@
   "Respring": "注销",
   "Enabled (respring required)": "启用（需注销）"
  },
- "prefs": {}
+ "prefs": {
+  "HOW IT WORKS": "工作原理",
+  "USEFUL ADDITIONS": "实用选项",
+  "USEFUL LINKS FOR POWERCUTS": "Powercuts 实用链接",
+  "Disable Automation notifications": "禁用自动化通知",
+  "Automations without confirmation": "自动化无需确认",
+  "Allow import/export Shortcuts as files": "允许以文件导入/导出快捷指令",
+  "Allow running sensitive actions unauthenticated": "允许免认证运行敏感操作",
+  "Hide top progress banner": "隐藏顶部进度横幅",
+  "Download pre-made workflows": "下载现成快捷指令",
+  "Available packs & actions": "可用动作包与动作",
+  "Developer documentation": "开发者文档",
+  "Respring": "注销",
+  "Powercuts is a library for the iOS Shortcuts app, which brings the ability to add new actions to the app which can be used in your Shortcuts and Personal Automations. If you haven't already, install some actions packs by searching for \"Powercuts\" in your package manager. You'll then find those actions in the Shortcut editor, in Apps>Powercuts.": "Powercuts 是 iOS「快捷指令」App 的功能扩展库，可为快捷指令和自动化新增操作。若尚未安装动作包，可在软件源搜索 \"Powercuts\" 安装。安装后，这些操作会出现在快捷指令编辑器的 App>Powercuts 分组中。",
+  "- Disable Automation notifications: prevents notifications when automations run": "- 禁用自动化通知：自动化运行时不再发送通知"
+ }
 }
