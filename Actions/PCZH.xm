@@ -405,6 +405,33 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
+#pragma mark - WFParameter 参数行标签（展开卡编辑器渲染源）
+static IMP g_origWFTitle = NULL;
+static NSString *ZH_wftitle_imp(id self, SEL _cmd) {
+    @try {
+        NSString *o = ((NSString *(*)(id, SEL))g_origWFTitle)(self, _cmd);
+        if (o.length) {
+            NSString *m = g_lab[o];
+            if ([m isKindOfClass:[NSString class]]) {
+                static int wt = 0;
+                if (wt < 15) { wt++;
+                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                    [lg appendFormat:@"HIT cls=%@ orig=%@\n", NSStringFromClass([self class]), o];
+                    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                }
+                return m;
+            }
+            static int wu = 0;
+            if (wu < 15) { wu++;
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                [lg appendFormat:@"MISS cls=%@ orig=%@\n", NSStringFromClass([self class]), o];
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh75_param.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            }
+        }
+        return o;
+    } @catch (id e) { return ((NSString *(*)(id, SEL))g_origWFTitle)(self, _cmd); }
+}
+
 #pragma mark - 设置页探针（Preferences/Powercuts 进程）
 
 static IMP g_origLoadSpecs = NULL, g_origLoadSpecs2 = NULL, g_origVWA = NULL;
@@ -540,7 +567,15 @@ static void PCZHDelayedInit(void) {
                 } else if (!cm) [report appendFormat:@"%s NOT found\n", pcsels[pi]];
             }
         } else [report appendString:@"PCAction nil\n"];
-        [report appendString:@"step=done v0.4.50\n"];
+        {
+            Class wfp = objc_getClass("WFParameter");
+            if (wfp) {
+                Method mt = class_getInstanceMethod(wfp, sel_registerName("title"));
+                if (mt && !g_origWFTitle) { g_origWFTitle = method_getImplementation(mt); method_setImplementation(mt, (IMP)ZH_wftitle_imp); [report appendString:@"WFParameter-title hooked\n"]; }
+                else if (!mt) [report appendString:@"WFParameter-title NOT found\n"];
+            } else [report appendString:@"WFParameter nil\n"];
+        }
+        [report appendString:@"step=done v0.4.54\n"];
     } @catch (id e) {
         [report appendFormat:@"hooks CRASHED: %@\n", e];
     }
