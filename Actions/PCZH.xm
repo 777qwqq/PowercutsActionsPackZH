@@ -301,6 +301,85 @@ static id ZH_cacheget_imp(id self, SEL _cmd) {
     @try { return ZHCacheTr(orig); } @catch (id e) { return orig; }
 }
 
+#pragma mark - 设置页映射（0.4.51：1.0.0 表 + 截图表 + typo 变体 + 长文本）
+static NSDictionary *g_setMap = nil;
+static void PCZHInitSettingsMap(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        g_setMap = @{
+            @"HOW IT WORKS": @"工作原理",
+            @"USEFUL ADDITIONS": @"实用增强",
+            @"USEFUL LINKS FOR POWERCUTS": @"Powercuts 实用链接",
+            @"Disable Automation notifications": @"禁用自动化通知",
+            @"Automations without confirmation": @"自动化无需确认",
+            @"Allow import/export Shortcuts as files": @"允许以文件方式导入/导出快捷指令",
+            @"Allow running sensitive actions unauthenticated": @"敏感动作无需解锁验证",
+            @"Allow running sensistive actions unauthenticated": @"敏感动作无需解锁验证",
+            @"Hide top progress banner": @"隐藏顶部进度横幅",
+            @"Respring": @"注销",
+            @"Enabled (respring required)": @"启用（需注销）",
+            @"Download pre-made workflows": @"下载现成快捷指令",
+            @"Available packs & actions": @"可用动作包与动作",
+            @"Developer documentation": @"开发者文档",
+            @"Powercuts is a library for the iOS Shortcuts app, which brings the ability to add new actions to the app which can be used in your Shortcuts and Personal Automations. If you haven't already, install some actions packs by searching for \"Powercuts\" in your package manager. You'll then find those actions in the Shortcut editor, in Apps>Powercuts.": @"Powercuts 是 iOS「快捷指令」App 的功能扩展库，可为快捷指令和自动化新增操作。若尚未安装动作包，可在软件源搜索 \"Powercuts\" 安装。安装后，这些操作会出现在快捷指令编辑器的 App>Powercuts 分组中。"
+        };
+    });
+}
+static NSString *ZHMap(NSString *s) {
+    if (![s isKindOfClass:[NSString class]]) return nil;
+    NSString *m = g_setMap[s];
+    if (m) return m;
+    if (s.length >= 30) {
+        for (NSString *k in g_setMap) {
+            if (k.length >= 30 && [s hasPrefix:k]) return g_setMap[k];
+        }
+    }
+    if ([s hasPrefix:@"- Disable Automation notifications:"]) return @"- 禁用自动化通知：自动化运行时不再发送通知\n- 自动化无需确认：所有触发器均可免确认直接运行自动化（注意：邮件和信息触发器不支持）\n- 允许以文件方式导入/导出快捷指令：以文件（.shortcuts 或 .wflow）而非 iCloud 链接导入/导出\n- 敏感动作无需解锁验证：部分操作运行前不再要求解锁。适合在锁屏可运行的自动化中使用。并非对所有敏感操作生效。\n- 隐藏顶部进度横幅：隐藏从主屏图标、辅助触控等运行快捷指令时顶部的进度横幅";
+    return nil;
+}
+
+// 0.4.51：PSSpecifier 渲染期翻译 + PCSPrefsListController 后处理
+static IMP g_origSpecName = NULL, g_origSpecProp = NULL, g_origSetSpecs2 = NULL;
+static NSString *ZH_specname_imp(id self, SEL _cmd) {
+    @try {
+        NSString *o = ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd);
+        NSString *m = ZHMap(o);
+        return m ?: o;
+    } @catch (id e) { return ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd); }
+}
+static id ZH_specprop_imp(id self, SEL _cmd, NSString *key) {
+    @try {
+        id v = ((id(*)(id, SEL, NSString *))g_origSpecProp)(self, _cmd, key);
+        if ([v isKindOfClass:[NSString class]]) {
+            NSString *m = ZHMap(v);
+            if (m) return m;
+        }
+        return v;
+    } @catch (id e) { return ((id(*)(id, SEL, NSString *))g_origSpecProp)(self, _cmd, key); }
+}
+static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
+    ((void(*)(id, SEL, NSArray *))g_origSetSpecs2)(self, _cmd, specs);
+    @try {
+        for (id spec in specs) {
+            if (![spec isKindOfClass:objc_getClass("PSSpecifier")]) continue;
+            for (NSString *key in @[@"name", @"header", @"footerText", @"title", @"label"]) {
+                @try {
+                    NSString *raw = [spec propertyForKey:key];
+                    if (![raw isKindOfClass:[NSString class]]) continue;
+                    NSString *m = ZHMap(raw);
+                    if (m) {
+                        Method mm = class_getInstanceMethod([spec class], sel_registerName("setProperty:forKey:"));
+                        if (mm) {
+                            void (*sp)(id, SEL, id, NSString *) = (void (*)(id, SEL, id, NSString *))method_getImplementation(mm);
+                            sp(spec, sel_registerName("setProperty:forKey:"), m, key);
+                        }
+                    }
+                } @catch (id e) {}
+            }
+        }
+    } @catch (id e) {}
+}
+
 #pragma mark - 设置页探针（Preferences/Powercuts 进程）
 
 static IMP g_origLoadSpecs = NULL, g_origLoadSpecs2 = NULL, g_origVWA = NULL;
@@ -342,6 +421,21 @@ static id ZH_loadspecs_imp(id self, SEL _cmd) {
 
 static void PCZHPrefsInit(void) {
     @try {
+        PCZHInitSettingsMap();
+        Class pss = objc_getClass("PSSpecifier");
+        if (pss) {
+            Method nm = class_getInstanceMethod(pss, sel_registerName("name"));
+            if (nm && !g_origSpecName) { g_origSpecName = method_getImplementation(nm); method_setImplementation(nm, (IMP)ZH_specname_imp); }
+            Method pm = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
+            if (pm && !g_origSpecProp) { g_origSpecProp = method_getImplementation(pm); method_setImplementation(pm, (IMP)ZH_specprop_imp); }
+        }
+        Class pcsp = objc_getClass("PCSPrefsListController");
+        if (pcsp) {
+            Method ml2 = class_getInstanceMethod(pcsp, sel_registerName("loadSpecifiers"));
+            if (ml2 && !g_origLoadSpecs2) { g_origLoadSpecs2 = method_getImplementation(ml2); method_setImplementation(ml2, (IMP)ZH_loadspecs2_imp); }
+            Method ms2 = class_getInstanceMethod(pcsp, sel_registerName("setSpecifiers:"));
+            if (ms2 && !g_origSetSpecs2) { g_origSetSpecs2 = method_getImplementation(ms2); method_setImplementation(ms2, (IMP)ZH_setspecs2_imp); }
+        }
         Class vc = objc_getClass("UIViewController");
         if (vc) {
             Method mv = class_getInstanceMethod(vc, sel_registerName("viewWillAppear:"));
