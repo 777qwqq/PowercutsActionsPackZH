@@ -629,139 +629,28 @@ static NSString *ZH_sumloctitle_imp(id self, SEL _cmd) {
     return ((NSString *(*)(id, SEL))g_origSumLocTitle)(self, _cmd);
 }
 
-// 0.4.40：设置页（Preferences 进程）—— PSSpecifier 拦截 + 全量 dump
-static IMP g_origSpecName = NULL, g_origGetProp = NULL;
-static NSDictionary *g_prefsTr = nil;
-
-// 长文本：精确匹配 → 长键前缀匹配（≥30 字符）
-static NSString *ZH_prefsLookup(NSString *o) {
-    if (!o.length) return nil;
-    id t = g_prefsTr[o];
-    if ([t isKindOfClass:[NSString class]]) return t;
-    if (o.length >= 30) {
-        for (NSString *k in g_prefsTr) {
-            if (k.length >= 30 && [o hasPrefix:k]) {
-                id tv = g_prefsTr[k];
-                if ([tv isKindOfClass:[NSString class]]) return tv;
-            }
-        }
-    }
-    return nil;
-}
-
-static NSString *ZH_prefsLineTr(NSString *line) {
-    // 逐行前缀匹配（行内任何微差不影响）
-    if ([line hasPrefix:@"- Disable Automation notifications:"]) return @"- 禁用自动化通知：自动化运行时不再发送通知";
-    if ([line hasPrefix:@"- Automations without confirmation:"]) return @"- 自动化无需确认：所有触发器均可免确认直接运行自动化（注意：邮件和信息触发器不支持）";
-    if ([line hasPrefix:@"- Allow import/export Shortcuts as files:"]) return @"- 允许以文件形式导入/导出快捷指令：以文件（.shortcuts 或 .wflow）而非 iCloud 链接导入/导出";
-    if ([line hasPrefix:@"- Allow running sensitive actions unauthenticated:"]) return @"- 允许免认证运行敏感操作：部分操作运行前不再要求解锁。适合在锁屏可运行的自动化中使用。并非对所有敏感操作生效。";
-    if ([line hasPrefix:@"- Hide top progress banner:"]) return @"- 隐藏顶部进度横幅：隐藏从主屏图标、辅助触控等运行快捷指令时顶部的进度横幅";
-    return nil;
-}
-
-static NSString *ZH_prefsFooterFix(NSString *o) {
-    // 长注释逐行兜底（换行变体）
-    if ([o hasPrefix:@"- Disable Automation notifications:"] || [o containsString:@"- Disable Automation notifications:"]) {
-        if (![o hasPrefix:@"- Disable"]) {
-            // 逐行处理
-            NSMutableArray *out = [NSMutableArray array];
-            for (NSString *line in [o componentsSeparatedByString:@"\n"]) {
-                NSString *t = ZH_prefsLineTr(line);
-                [out addObject: t ?: line];
-            }
-            return [out componentsJoinedByString:@"\n"];
-        }
-        NSString *en1 = @"- Disable Automation notifications: prevents notifications when automations run\n";
-        NSString *en2 = @"- Automations without confirmation: adds the ability to run automations without having to confirm, for all triggers (please note that it won't work for Mail and Message triggers)\n";
-        NSString *en3 = @"- Allow import/export Shortcuts as files: adds the ability to import/export Shortcuts as a file (.shortcuts or .wflow) instead of an iCloud link\n";
-        NSString *en4 = @"- Allow running sensitive actions unauthenticated: prevent some actions from asking to unlock your phone before running. It can be useful when using such actions in an automation which can run while locked. Does NOT work with all sensitive actions.\n";
-        NSString *en5 = @"- Hide top progress banner: hide the intrusive top progress banner which shows while running a Shortcut from an homescreen icon, from Assistive Touch, or else";
-        NSString *r = [o copy];
-        r = [r stringByReplacingOccurrencesOfString:en1 withString:@"- 禁用自动化通知：自动化运行时不再发送通知\n"];
-        r = [r stringByReplacingOccurrencesOfString:en2 withString:@"- 自动化无需确认：所有触发器均可免确认直接运行自动化（注意：邮件和信息触发器不支持）\n"];
-        r = [r stringByReplacingOccurrencesOfString:en3 withString:@"- 允许以文件形式导入/导出快捷指令：以文件（.shortcuts 或 .wflow）而非 iCloud 链接导入/导出\n"];
-        r = [r stringByReplacingOccurrencesOfString:en4 withString:@"- 允许免认证运行敏感操作：部分操作运行前不再要求解锁。适合在锁屏可运行的自动化中使用。并非对所有敏感操作生效。\n"];
-        r = [r stringByReplacingOccurrencesOfString:en5 withString:@"- 隐藏顶部进度横幅：隐藏从主屏图标、辅助触控等运行快捷指令时顶部的进度横幅"];
-        return r;
-    }
-    return nil;
-}
-
-static NSString *ZH_prefsTr(NSString *o) {
-    NSString *r = ZH_prefsLookup(o);
-    if (r) return r;
-    return ZH_prefsFooterFix(o);
-}
-
-static NSString *ZH_specname_imp(id self, SEL _cmd) {
-    NSString *o = nil;
-    @try { o = ((NSString *(*)(id, SEL))g_origSpecName)(self, _cmd); } @catch (id e) { return nil; }
+// 0.4.47：决定性探针——导航栈类名 + App 内 plist 全提
+static IMP g_origPush = NULL;
+static void ZH_push_imp(id self, SEL _cmd, UIViewController *vc, BOOL animated) {
     @try {
-        if (o.length) {
-            NSString *t = ZH_prefsTr(o);
-            if ([t isKindOfClass:[NSString class]]) return t;
-            BOOL hasAscii = NO;
-            for (NSUInteger ci = 0; ci < o.length && !hasAscii; ci++) {
-                unichar ch = [o characterAtIndex:ci];
-                if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) hasAscii = YES;
-            }
-            if (hasAscii) {
-                static int sn = 0;
-                if (sn < 200) { sn++;
-                    id ident = nil;
-                    @try { ident = [self valueForKey:@"identifier"]; } @catch (id e) {}
-                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                    [lg appendFormat:@"name=%@ | ident=%@\n", o, ident];
-                    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                }
-            }
+        static int nv = 0;
+        if (nv < 30) { nv++;
+            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+            NSString *t = nil;
+            @try { t = [vc valueForKey:@"title"]; } @catch (id e) {}
+            [lg appendFormat:@"push cls=%@ title=%@\n", NSStringFromClass([vc class]), t];
+            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
     } @catch (id e) {}
-    return o;
-}
-
-static id ZH_getprop_imp(id self, SEL _cmd, NSString *key) {
-    id v = ((id(*)(id, SEL, NSString *))g_origGetProp)(self, _cmd, key);
-    @try {
-        if ([v isKindOfClass:[NSString class]] && [key isKindOfClass:[NSString class]]) {
-            NSString *t = ZH_prefsTr(v);
-            if (t) return t;
-        }
-    } @catch (id e) {}
-    return v;
-}
-
-static IMP g_origSetSpecs = NULL;
-static void ZH_setspecs_imp(id self, SEL _cmd, NSArray *specs) {
-    ((void(*)(id, SEL, NSArray *))g_origSetSpecs)(self, _cmd, specs);
-    @try {
-        for (id spec in specs) {
-            if (![spec isKindOfClass:objc_getClass("PSSpecifier")]) continue;
-            for (NSString *key in @[@"name", @"header", @"footerText", @"title", @"label"]) {
-                @try {
-                    NSString *raw = [spec propertyForKey:key];
-                    if (![raw isKindOfClass:[NSString class]]) continue;
-                    NSString *t = ZH_prefsTr(raw);
-                    if ([t isKindOfClass:[NSString class]]) {
-                        Method m = class_getInstanceMethod([spec class], sel_registerName("setProperty:forKey:"));
-                        if (m) {
-                            void (*sp)(id, SEL, id, NSString *) = (void (*)(id, SEL, id, NSString *))method_getImplementation(m);
-                            sp(spec, sel_registerName("setProperty:forKey:"), t, key);
-                        }
-                    }
-                } @catch (id e) {}
-            }
-        }
-    } @catch (id e) {}
+    ((void(*)(id, SEL, UIViewController*, BOOL))g_origPush)(self, _cmd, vc, animated);
 }
 
 static void PCZHPlistDump(void) {
     @try {
         NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh72_plist.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-        if (lg.length > 100) return; // 已 dump 过
+        if (lg.length > 100) return;
         NSFileManager *fm = [NSFileManager defaultManager];
         int dumped = 0;
-        // A: jbroot 全树搜任意 powercuts 文件
         NSArray *roots = @[@"/var/jb/Library", @"/var/jb/usr/share", @"/var/jb/Applications", @"/Applications"];
         for (NSString *root in roots) {
             if (dumped >= 4) break;
@@ -769,7 +658,7 @@ static void PCZHPlistDump(void) {
             for (NSString *rel in paths) {
                 if (dumped >= 4) break;
                 if (![rel.lowercaseString containsString:@"powercuts"]) continue;
-                if (![rel hasSuffix:@".plist"] && ![rel hasSuffix:@".strings"] && ![rel hasSuffix:@".html"] && ![rel hasSuffix:@".txt"]) continue;
+                if (![rel hasSuffix:@".plist"] && ![rel hasSuffix:@".strings"]) continue;
                 NSString *full = [root stringByAppendingPathComponent:rel];
                 NSDictionary *st = [fm attributesOfItemAtPath:full error:nil];
                 if (!st || [st fileSize] > 300000) continue;
@@ -782,24 +671,21 @@ static void PCZHPlistDump(void) {
                 dumped++;
             }
         }
-        // B: 应用容器搜 Powercuts App 的 plist/strings
         for (NSString *uuid in [fm contentsOfDirectoryAtPath:@"/var/containers/Bundle/Application" error:nil]) {
             if (dumped >= 6) break;
             NSString *cpath = [@"/var/containers/Bundle/Application" stringByAppendingPathComponent:uuid];
-            NSString *meta = [cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"];
-            NSDictionary *mm = [NSDictionary dictionaryWithContentsOfFile:meta];
+            NSDictionary *mm = [NSDictionary dictionaryWithContentsOfFile:[cpath stringByAppendingPathComponent:@".com.apple.mobile_container_manager.metadata.plist"]];
             NSString *bid = mm[@"MCMMetadataIdentifier"] ?: @"";
             if (![bid.lowercaseString containsString:@"powercuts"] && ![bid.lowercaseString containsString:@"anthopak"]) continue;
             NSArray *apps = [fm contentsOfDirectoryAtPath:cpath error:nil] ?: @[];
             for (NSString *app in apps) {
                 if (![app hasSuffix:@".app"]) continue;
                 NSString *apath = [cpath stringByAppendingPathComponent:app];
-                NSArray *files = [fm subpathsOfDirectoryAtPath:apath error:nil] ?: @[];
                 int cnt = 0;
-                for (NSString *f in files) {
-                    if (cnt >= 3 || dumped >= 6) break;
-                    if (![f.lowercaseString containsString:@"powercuts"]) continue;
+                for (NSString *f in ([fm subpathsOfDirectoryAtPath:apath error:nil] ?: @[])) {
+                    if (cnt >= 4 || dumped >= 6) break;
                     if (![f hasSuffix:@".plist"] && ![f hasSuffix:@".strings"]) continue;
+                    if ([f isEqualToString:@"Info.plist"]) continue;
                     NSString *full = [apath stringByAppendingPathComponent:f];
                     NSData *data = [NSData dataWithContentsOfFile:full];
                     if (!data) continue;
@@ -819,31 +705,16 @@ static void PCZHPlistDump(void) {
 static void PCZHPrefsInit(void) {
     @try {
         PCZHPlistDump();
-        // prefs 表：table.json 的 prefs 分区（英文原文 → 中文）
-        @try {
-            NSString *tp = @"/var/jb/usr/share/pczh/table.json";
-            NSDictionary *t = [NSDictionary dictionaryWithContentsOfFile:tp] ?: ({ NSData *td = [NSData dataWithContentsOfFile:tp]; td ? [NSJSONSerialization JSONObjectWithData:td options:0 error:nil] : nil; });
-            id p = t[@"prefs"];
-            if ([p isKindOfClass:[NSDictionary class]]) g_prefsTr = p;
-        } @catch (id e) {}
-        Class pss = objc_getClass("PSSpecifier");
-        if (pss) {
-            Method m = class_getInstanceMethod(pss, sel_registerName("name"));
-            if (m && !g_origSpecName) {
-                g_origSpecName = method_getImplementation(m);
-                method_setImplementation(m, (IMP)ZH_specname_imp);
+        Class nvc = objc_getClass("UINavigationController");
+        if (nvc) {
+            Method mp = class_getInstanceMethod(nvc, sel_registerName("pushViewController:animated:"));
+            if (mp && !g_origPush) {
+                g_origPush = method_getImplementation(mp);
+                method_setImplementation(mp, (IMP)ZH_push_imp);
+                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                [lg appendString:@"== nav push hooked ==\n"];
+                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
-
-            Method m3 = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
-            if (m3 && !g_origGetProp) { g_origGetProp = method_getImplementation(m3); method_setImplementation(m3, (IMP)ZH_getprop_imp); }
-            Class plc = objc_getClass("PSListController");
-            if (plc) {
-                Method m4 = class_getInstanceMethod(plc, sel_registerName("setSpecifiers:"));
-                if (m4 && !g_origSetSpecs) { g_origSetSpecs = method_getImplementation(m4); method_setImplementation(m4, (IMP)ZH_setspecs_imp); }
-            }
-            NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-            [lg appendString:@"== PSSpecifier name/setProp/getProp hooked ==\n"];
-            [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
     } @catch (id e) {}
 }
@@ -856,7 +727,7 @@ static void PCZHDelayedInit(void) {
             [report appendFormat:@"proc=%@ step=entry\n", procName];
             [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         } @catch (id e) { return; }
-        if ([procName isEqualToString:@"Preferences"]) {
+        if ([procName isEqualToString:@"Preferences"] || [procName isEqualToString:@"Powercuts"]) {
             PCZHPrefsInit();
             [report appendString:@"prefs-init done\n"];
             [report writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh70_hooked.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];

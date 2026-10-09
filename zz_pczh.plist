@@ -3,6 +3,7 @@
         Bundles = (
             "com.apple.shortcuts",
             "com.apple.Preferences",
+            "com.anthopak.powercuts",
             "com.apple.WorkflowKit.BackgroundShortcutRunner",
             "com.apple.WorkflowKit.ShortcutsIntents",
         );
