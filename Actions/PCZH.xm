@@ -216,6 +216,7 @@ static NSString *ZH_pcdesc_imp(id self, SEL _cmd, NSString *ident) {
     } @catch (id e) {}
     return ((NSString *(*)(id, SEL, NSString *))g_origPCDesc)(self, _cmd, ident);
 }
+static void ZHDeepTr(NSMutableDictionary *def, NSDictionary *tr);
 static IMP g_origPCParams = NULL;
 static id ZH_pcparams_imp(id self, SEL _cmd, NSString *ident) {
     id v = ((id(*)(id, SEL, NSString *))g_origPCParams)(self, _cmd, ident);
