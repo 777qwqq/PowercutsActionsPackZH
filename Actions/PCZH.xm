@@ -216,31 +216,6 @@ static NSString *ZH_pcdesc_imp(id self, SEL _cmd, NSString *ident) {
     } @catch (id e) {}
     return ((NSString *(*)(id, SEL, NSString *))g_origPCDesc)(self, _cmd, ident);
 }
-static void ZHDeepTr(NSMutableDictionary *def, NSDictionary *tr);
-static IMP g_origPCParams = NULL;
-static id ZH_pcparams_imp(id self, SEL _cmd, NSString *ident) {
-    id v = ((id(*)(id, SEL, NSString *))g_origPCParams)(self, _cmd, ident);
-    @try {
-        NSDictionary *tr = ZHTr(ident);
-        if ([v isKindOfClass:[NSDictionary class]]) {
-            NSMutableDictionary *md = [(NSDictionary *)v mutableCopy];
-            ZHDeepTr(md, tr);
-            return md;
-        }
-        if ([v isKindOfClass:[NSArray class]]) {
-            NSMutableArray *na = [NSMutableArray array];
-            for (id it in (NSArray *)v) {
-                if ([it isKindOfClass:[NSDictionary class]]) {
-                    NSMutableDictionary *nit = [(NSDictionary *)it mutableCopy];
-                    ZHDeepTr(nit, tr);
-                    [na addObject:nit];
-                } else [na addObject:it];
-            }
-            return na;
-        }
-    } @catch (id e) {}
-    return v;
-}
 static NSString *ZH_pcsum_imp(id self, SEL _cmd, NSString *ident) {
     @try {
         NSDictionary *tr = ZHTr(ident);
@@ -405,56 +380,7 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
-#pragma mark - 显示层翻译（UILabel setText，g_lab 精确匹配）
-static IMP g_origSetText = NULL;
-static void ZH_settext_imp(id self, SEL _cmd, NSString *text) {
-    @try {
-        if ([text isKindOfClass:[NSString class]] && text.length > 1 && text.length < 40) {
-            NSString *m = g_lab[text];
-            if ([m isKindOfClass:[NSString class]]) text = m;
-        }
-    } @catch (id e) {}
-    ((void(*)(id, SEL, NSString *))g_origSetText)(self, _cmd, text);
-}
-
 #pragma mark - 设置页探针（Preferences/Powercuts 进程）
-
-static IMP g_origLoadSpecs = NULL, g_origLoadSpecs2 = NULL, g_origVWA = NULL;
-static void ZHLG(NSString *line) {
-    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-    [lg appendString:line];
-    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh73_nav.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-}
-static void ZH_vwa_imp(id self, SEL _cmd, BOOL animated) {
-    @try {
-        static int vw = 0;
-        if (vw < 40) { vw++;
-            NSString *t = nil;
-            @try { t = [self valueForKey:@"title"]; } @catch (id e) {}
-            ZHLG([NSString stringWithFormat:@"appear cls=%@ title=%@\n", NSStringFromClass([self class]), t]);
-        }
-    } @catch (id e) {}
-    ((void(*)(id, SEL, BOOL))g_origVWA)(self, _cmd, animated);
-}
-static id ZH_loadspecs2_imp(id self, SEL _cmd) {
-    @try {
-        static int ls2 = 0;
-        if (ls2 < 10) { ls2++; ZHLG([NSString stringWithFormat:@"loadSpec2 cls=%@\n", NSStringFromClass([self class])]); }
-    } @catch (id e) {}
-    return ((id(*)(id, SEL))g_origLoadSpecs2)(self, _cmd);
-}
-static id ZH_loadspecs_imp(id self, SEL _cmd) {
-    @try {
-        static int ls = 0;
-        if (ls < 20) { ls++;
-            NSString *file = nil, *url = nil;
-            @try { file = [self valueForKey:@"file"]; } @catch (id e) {}
-            @try { url = [[self valueForKey:@"specifiersURL"] description]; } @catch (id e) {}
-            ZHLG([NSString stringWithFormat:@"loadSpec cls=%@ file=%@ url=%@\n", NSStringFromClass([self class]), file, url]);
-        }
-    } @catch (id e) {}
-    return ((id(*)(id, SEL))g_origLoadSpecs)(self, _cmd);
-}
 
 static void PCZHPrefsInit(void) {
     @try {
@@ -478,20 +404,7 @@ static void PCZHPrefsInit(void) {
             Method mv = class_getInstanceMethod(vc, sel_registerName("viewWillAppear:"));
             if (mv && !g_origVWA) { g_origVWA = method_getImplementation(mv); method_setImplementation(mv, (IMP)ZH_vwa_imp); }
         }
-        Class pui = objc_getClass("PSUIPrefsListController");
-        if (pui) {
-            Method mp2 = class_getInstanceMethod(pui, sel_registerName("loadSpecifiers"));
-            if (mp2 && !g_origLoadSpecs2) { g_origLoadSpecs2 = method_getImplementation(mp2); method_setImplementation(mp2, (IMP)ZH_loadspecs2_imp); }
-        }
-        Class plc = objc_getClass("PSListController");
-        if (plc) {
-            Method ml = class_getInstanceMethod(plc, sel_registerName("loadSpecifiers"));
-            if (ml && !g_origLoadSpecs) {
-                g_origLoadSpecs = method_getImplementation(ml);
-                method_setImplementation(ml, (IMP)ZH_loadspecs_imp);
-                ZHLG(@"== prefs probes hooked ==\n");
-            }
-        }
+
     } @catch (id e) {}
 }
 
@@ -538,10 +451,10 @@ static void PCZHDelayedInit(void) {
 
         Class pss2 = objc_getClass("PCAction");
         if (pss2) {
-            const char *pcsels[4] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:", "parametersDefinitionForIdentifier:"};
-            IMP *imps[4] = {&g_origPCName, &g_origPCDesc, &g_origPCSum, &g_origPCParams};
-            IMP imps2[4] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp, (IMP)ZH_pcparams_imp};
-            for (int pi = 0; pi < 4; pi++) {
+            const char *pcsels[3] = {"nameForIdentifier:", "descriptionSummaryForIdentifier:", "parameterSummaryForIdentifier:"};
+            IMP *imps[3] = {&g_origPCName, &g_origPCDesc, &g_origPCSum};
+            IMP imps2[3] = {(IMP)ZH_pcname_imp, (IMP)ZH_pcdesc_imp, (IMP)ZH_pcsum_imp};
+            for (int pi = 0; pi < 3; pi++) {
                 Method cm = class_getInstanceMethod(pss2, sel_registerName(pcsels[pi]));
                 BOOL isClass = NO;
                 if (!cm) { cm = class_getClassMethod(pss2, sel_registerName(pcsels[pi])); isClass = YES; }
@@ -552,15 +465,7 @@ static void PCZHDelayedInit(void) {
                 } else if (!cm) [report appendFormat:@"%s NOT found\n", pcsels[pi]];
             }
         } else [report appendString:@"PCAction nil\n"];
-        {
-            Class ul = objc_getClass("UILabel");
-            if (ul) {
-                Method us = class_getInstanceMethod(ul, sel_registerName("setText:"));
-                if (us && !g_origSetText) { g_origSetText = method_getImplementation(us); method_setImplementation(us, (IMP)ZH_settext_imp); [report appendString:@"UILabel-setText hooked\n"]; }
-                else if (!us) [report appendString:@"UILabel-setText NOT found\n"];
-            }
-        }
-        [report appendString:@"step=done v0.4.55\n"];
+        [report appendString:@"step=done v0.4.50\n"];
     } @catch (id e) {
         [report appendFormat:@"hooks CRASHED: %@\n", e];
     }
