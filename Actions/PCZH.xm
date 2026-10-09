@@ -649,9 +649,28 @@ static NSString *ZH_prefsLookup(NSString *o) {
     return nil;
 }
 
+static NSString *ZH_prefsLineTr(NSString *line) {
+    // 逐行前缀匹配（行内任何微差不影响）
+    if ([line hasPrefix:@"- Disable Automation notifications:"]) return @"- 禁用自动化通知：自动化运行时不再发送通知";
+    if ([line hasPrefix:@"- Automations without confirmation:"]) return @"- 自动化无需确认：所有触发器均可免确认直接运行自动化（注意：邮件和信息触发器不支持）";
+    if ([line hasPrefix:@"- Allow import/export Shortcuts as files:"]) return @"- 允许以文件形式导入/导出快捷指令：以文件（.shortcuts 或 .wflow）而非 iCloud 链接导入/导出";
+    if ([line hasPrefix:@"- Allow running sensitive actions unauthenticated:"]) return @"- 允许免认证运行敏感操作：部分操作运行前不再要求解锁。适合在锁屏可运行的自动化中使用。并非对所有敏感操作生效。";
+    if ([line hasPrefix:@"- Hide top progress banner:"]) return @"- 隐藏顶部进度横幅：隐藏从主屏图标、辅助触控等运行快捷指令时顶部的进度横幅";
+    return nil;
+}
+
 static NSString *ZH_prefsFooterFix(NSString *o) {
     // 长注释逐行兜底（换行变体）
-    if ([o hasPrefix:@"- Disable Automation notifications:"]) {
+    if ([o hasPrefix:@"- Disable Automation notifications:"] || [o containsString:@"- Disable Automation notifications:"]) {
+        if (![o hasPrefix:@"- Disable"]) {
+            // 逐行处理
+            NSMutableArray *out = [NSMutableArray array];
+            for (NSString *line in [o componentsSeparatedByString:@"\n"]) {
+                NSString *t = ZH_prefsLineTr(line);
+                [out addObject: t ?: line];
+            }
+            return [out componentsJoinedByString:@"\n"];
+        }
         NSString *en1 = @"- Disable Automation notifications: prevents notifications when automations run\n";
         NSString *en2 = @"- Automations without confirmation: adds the ability to run automations without having to confirm, for all triggers (please note that it won't work for Mail and Message triggers)\n";
         NSString *en3 = @"- Allow import/export Shortcuts as files: adds the ability to import/export Shortcuts as a file (.shortcuts or .wflow) instead of an iCloud link\n";
@@ -712,6 +731,30 @@ static id ZH_getprop_imp(id self, SEL _cmd, NSString *key) {
     return v;
 }
 
+static IMP g_origSetSpecs = NULL;
+static void ZH_setspecs_imp(id self, SEL _cmd, NSArray *specs) {
+    ((void(*)(id, SEL, NSArray *))g_origSetSpecs)(self, _cmd, specs);
+    @try {
+        for (PSSpecifier *spec in specs) {
+            if (![spec isKindOfClass:objc_getClass("PSSpecifier")]) continue;
+            for (NSString *key in @[@"name", @"header", @"footerText", @"title", @"label"]) {
+                @try {
+                    NSString *raw = [spec propertyForKey:key];
+                    if (![raw isKindOfClass:[NSString class]]) continue;
+                    NSString *t = ZH_prefsTr(raw);
+                    if ([t isKindOfClass:[NSString class]]) {
+                        Method m = class_getInstanceMethod([spec class], sel_registerName("setProperty:forKey:"));
+                        if (m) {
+                            void (*sp)(id, SEL, id, NSString *) = (void (*)(id, SEL, id, NSString *))method_getImplementation(m);
+                            sp(spec, sel_registerName("setProperty:forKey:"), t, key);
+                        }
+                    }
+                } @catch (id e) {}
+            }
+        }
+    } @catch (id e) {}
+}
+
 static void PCZHPrefsInit(void) {
     @try {
         // prefs 表：table.json 的 prefs 分区（英文原文 → 中文）
@@ -731,6 +774,11 @@ static void PCZHPrefsInit(void) {
 
             Method m3 = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
             if (m3 && !g_origGetProp) { g_origGetProp = method_getImplementation(m3); method_setImplementation(m3, (IMP)ZH_getprop_imp); }
+            Class plc = objc_getClass("PSListController");
+            if (plc) {
+                Method m4 = class_getInstanceMethod(plc, sel_registerName("setSpecifiers:"));
+                if (m4 && !g_origSetSpecs) { g_origSetSpecs = method_getImplementation(m4); method_setImplementation(m4, (IMP)ZH_setspecs_imp); }
+            }
             NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
             [lg appendString:@"== PSSpecifier name/setProp/getProp hooked ==\n"];
             [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
@@ -978,7 +1026,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.43\n"];
+            [report appendString:@"step=done v0.4.44\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
