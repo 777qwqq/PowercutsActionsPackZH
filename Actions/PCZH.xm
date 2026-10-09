@@ -380,27 +380,6 @@ static void ZH_setspecs2_imp(id self, SEL _cmd, NSArray *specs) {
     } @catch (id e) {}
 }
 
-#pragma mark - 设置页探针（Preferences/Powercuts 进程）
-
-static void PCZHPrefsInit(void) {
-    @try {
-        PCZHInitSettingsMap();
-        Class pss = objc_getClass("PSSpecifier");
-        if (pss) {
-            Method nm = class_getInstanceMethod(pss, sel_registerName("name"));
-            if (nm && !g_origSpecName) { g_origSpecName = method_getImplementation(nm); method_setImplementation(nm, (IMP)ZH_specname_imp); }
-            Method pm = class_getInstanceMethod(pss, sel_registerName("propertyForKey:"));
-            if (pm && !g_origSpecProp) { g_origSpecProp = method_getImplementation(pm); method_setImplementation(pm, (IMP)ZH_specprop_imp); }
-        }
-        Class pcsp = objc_getClass("PCSPrefsListController");
-        if (pcsp) {
-            Method ms2 = class_getInstanceMethod(pcsp, sel_registerName("setSpecifiers:"));
-            if (ms2 && !g_origSetSpecs2) { g_origSetSpecs2 = method_getImplementation(ms2); method_setImplementation(ms2, (IMP)ZH_setspecs2_imp); }
-        }
-
-    } @catch (id e) {}
-}
-
 #pragma mark - 主入口
 
 static void PCZHPrefsInit(void) {
