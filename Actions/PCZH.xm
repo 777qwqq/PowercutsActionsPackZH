@@ -640,13 +640,20 @@ static NSString *ZH_specname_imp(id self, SEL _cmd) {
         if (o.length) {
             id t = g_prefsTr[o];
             if ([t isKindOfClass:[NSString class]]) return t;
-            static int sn = 0;
-            if (sn < 80) { sn++;
-                id ident = nil;
-                @try { ident = [self valueForKey:@"identifier"]; } @catch (id e) {}
-                NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
-                [lg appendFormat:@"name=%@ | ident=%@\n", o, ident];
-                [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            BOOL hasAscii = NO;
+            for (NSUInteger ci = 0; ci < o.length && !hasAscii; ci++) {
+                unichar ch = [o characterAtIndex:ci];
+                if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) hasAscii = YES;
+            }
+            if (hasAscii) {
+                static int sn = 0;
+                if (sn < 200) { sn++;
+                    id ident = nil;
+                    @try { ident = [self valueForKey:@"identifier"]; } @catch (id e) {}
+                    NSMutableString *lg = [NSMutableString stringWithContentsOfFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] encoding:NSUTF8StringEncoding error:nil] ?: [NSMutableString new];
+                    [lg appendFormat:@"name=%@ | ident=%@\n", o, ident];
+                    [lg writeToFile:[ZHLogDir() stringByAppendingPathComponent:@"pczh71_prefs.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                }
             }
         }
     } @catch (id e) {}
@@ -916,7 +923,7 @@ static void PCZHDelayedInit(void) {
                         } else if (!m3) [report appendString:@"SUM-loctitle NOT found\n"];
                     } else [report appendString:@"WFActionParameterSummary nil\n"];
                 }
-            [report appendString:@"step=done v0.4.40\n"];
+            [report appendString:@"step=done v0.4.41\n"];
         } @catch (id e) {
             [report appendFormat:@"hooks CRASHED: %@\n", e];
         }
